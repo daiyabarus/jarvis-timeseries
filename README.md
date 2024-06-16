@@ -1,4 +1,4 @@
-# My Streamlit App
+# My Jarvis App
 
 This is a Streamlit app for programming Python with Streamlit, Pandas, Plotly, Seaborn, and Matplotlib.
 
