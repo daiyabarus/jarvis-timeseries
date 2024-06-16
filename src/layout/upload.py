@@ -1,5 +1,5 @@
 import streamlit as st
-from utils import DatabaseConnector
+from utils.db_con import DatabaseConnector
 import pandas as pd
 import io
 

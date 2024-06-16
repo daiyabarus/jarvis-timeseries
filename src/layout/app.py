@@ -1,5 +1,8 @@
 import streamlit as st
-from config import navbar, page_config
+from config.navbar import navbar
+from config.page_config import page_config
+from layout.upload import DatabaseManager, UploadButton
+from layout.sidebar import sidebar
 
 
 def init_session_state():
@@ -12,20 +15,15 @@ def run_app():
     page = navbar()
     init_session_state()
 
-    if page != "Upload":
-        options = sidebar(page)
+    if page in ["Upload", "Jarvis", "Github", "About"]:
+        get_page_content(page)
     else:
-        options = None
-    get_page_content(page, options)
+        options = sidebar()
+        get_page_content(options)
 
 
 def get_page_content(page):
     if page == "Upload":
-        from layout import (
-            DatabaseManager,
-            UploadButton,
-        )  # Move the import statements here
-
         db_mng = DatabaseManager()
         db_mng.connect_to_database()
         selected_table = db_mng.select_table()
