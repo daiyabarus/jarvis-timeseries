@@ -3,6 +3,8 @@ from config.navbar import navbar
 from config.page_config import page_config
 from layout.upload import DatabaseManager, UploadButton
 from layout.sidebar import sidebar
+from layout.ltedaily import LteDaily
+from utils.db_process import DatabaseUtils
 
 
 def init_session_state():
@@ -15,15 +17,19 @@ def run_app():
     page = navbar()
     init_session_state()
 
+    db_utils = DatabaseUtils()
+    db_utils.connect_to_database()
+
     if page not in ["Upload", "Jarvis", "Github", "About"]:
-        # get_page_content(page)
         options = sidebar(page)
     else:
         options = None
-    get_page_content(page, options)
+    get_page_content(page, db_utils)
+
+    db_utils.disconnect_from_database()
 
 
-def get_page_content(page, options):
+def get_page_content(page, db_utils):
     if page == "Upload":
         db_mng = DatabaseManager()
         db_mng.connect_to_database()
@@ -31,9 +37,6 @@ def get_page_content(page, options):
         uploadbttn = UploadButton()
         uploadbttn.connect_to_database()
         uploadbttn.upload_button(selected_table)
-    # elif page == "NR":
-    #     getnr(options)
-    # elif page == "LTE":
-    #     getlte(options)
-    # elif page == "GSM":
-    #     getgsm(options)
+    elif page == "LTE":
+        lte_daily = LteDaily(db_utils)
+        lte_daily.run()

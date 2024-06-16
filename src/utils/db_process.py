@@ -30,9 +30,17 @@ class DatabaseUtils:
             st.error("Not connected to the database.")
             return []
 
+    # def select_table(self):
+    #     tables = self.get_tables_list()
+    #     selected_table = st.sidebar.selectbox("Select a table", tables)
+    #     self.selected_table = selected_table
+    #     return selected_table
+
     def select_table(self):
         tables = self.get_tables_list()
-        selected_table = st.sidebar.selectbox("Select a table", tables)
+        selected_table = st.sidebar.selectbox(
+            "Select a table", tables, key="db_process_select_table"
+        )
         self.selected_table = selected_table
         return selected_table
 
