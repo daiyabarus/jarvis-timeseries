@@ -1,11 +1,9 @@
 from streamlit_navigation_bar import st_navbar
 
-
 # TAG: navbar is configuration for TOP the navigation bar
 
 
 def navbar():
-    icon = "assets/jarvis.png"
     pages = ["NR", "LTE", "GSM", "Upload", "Jarvis", "GitHub", "About"]
     urls = {"GitHub": "https://github.com/daiyabarus/forged-timeseries.git"}
 
@@ -35,7 +33,6 @@ def navbar():
     }
 
     page = st_navbar(
-        icon,
         pages,
         urls=urls,
         styles=styles,

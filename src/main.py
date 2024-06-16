@@ -1,4 +1,4 @@
-from layout.app import run_app
+from layout import run_app
 
 
 def main():
