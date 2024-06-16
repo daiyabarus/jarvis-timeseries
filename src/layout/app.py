@@ -15,14 +15,15 @@ def run_app():
     page = navbar()
     init_session_state()
 
-    if page in ["Upload", "Jarvis", "Github", "About"]:
-        get_page_content(page)
+    if page not in ["Upload", "Jarvis", "Github", "About"]:
+        # get_page_content(page)
+        options = sidebar(page)
     else:
-        options = sidebar()
-        get_page_content(options)
+        options = None
+    get_page_content(page, options)
 
 
-def get_page_content(page):
+def get_page_content(page, options):
     if page == "Upload":
         db_mng = DatabaseManager()
         db_mng.connect_to_database()
@@ -30,3 +31,9 @@ def get_page_content(page):
         uploadbttn = UploadButton()
         uploadbttn.connect_to_database()
         uploadbttn.upload_button(selected_table)
+    # elif page == "NR":
+    #     getnr(options)
+    # elif page == "LTE":
+    #     getlte(options)
+    # elif page == "GSM":
+    #     getgsm(options)
