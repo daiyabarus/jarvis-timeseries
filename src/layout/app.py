@@ -5,6 +5,7 @@ from layout.upload import DatabaseManager, UploadButton
 from layout.sidebar import sidebar
 from layout.ltedaily import LteDaily
 from utils.db_process import DatabaseUtils
+import pandas as pd
 
 
 def init_session_state():
@@ -21,15 +22,18 @@ def run_app():
     db_utils.connect_to_database()
 
     if page not in ["Upload", "Jarvis", "Github", "About"]:
-        options = sidebar(page)
+        selected_table, df = sidebar()
     else:
-        options = None
-    get_page_content(page, db_utils)
+        selected_table, df = None, None
+
+    get_page_content(page, db_utils, selected_table, df)
 
     db_utils.disconnect_from_database()
 
 
-def get_page_content(page, db_utils):
+def get_page_content(
+    page: str, db_utils: DatabaseUtils, selected_table: str, df: pd.DataFrame
+):
     if page == "Upload":
         db_mng = DatabaseManager()
         db_mng.connect_to_database()
@@ -38,5 +42,8 @@ def get_page_content(page, db_utils):
         uploadbttn.connect_to_database()
         uploadbttn.upload_button(selected_table)
     elif page == "LTE":
-        lte_daily = LteDaily(db_utils)
-        lte_daily.run()
+        if selected_table and df is not None:
+            lte_daily = LteDaily(db_utils)
+            lte_daily.run(selected_table, df)
+        else:
+            st.warning("Please select a table and SITEID from the sidebar.")

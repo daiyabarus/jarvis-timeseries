@@ -1,20 +1,20 @@
 import streamlit as st
-from utils.db_con import DatabaseConnector
+from utils.dbutils import get_db_connection
 import pandas as pd
 import io
+from sqlalchemy import text
 
 
 class DatabaseManager:
     def __init__(self):
-        self.conn = None
+        self.engine = None
         self.tables = []
         self.selected_table = None
 
     def connect_to_database(self):
         try:
-            db_connector = DatabaseConnector()
-            self.conn = db_connector.connect()
-            if self.conn:
+            self.engine = get_db_connection()
+            if self.engine:
                 st.success("Connected to the database!")
                 self.get_tables()
             else:
@@ -23,48 +23,45 @@ class DatabaseManager:
             st.error(f"Error connecting to the database: {error}")
 
     def get_tables(self):
-        if self.conn is None:
+        if self.engine is None:
             st.error("Not connected to the database.")
             return
 
         try:
-            cursor = self.conn.cursor()
-            cursor.execute(
+            query = text(
                 "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"
             )
-            self.tables = [table[0] for table in cursor.fetchall()]
+            with self.engine.connect() as connection:
+                result = connection.execute(query)
+                self.tables = [table[0] for table in result]
         except Exception as error:
             st.error(f"Error retrieving tables: {error}")
-        finally:
-            cursor.close()
 
     def print_table(self, table_name):
-        if self.conn is None:
+        if self.engine is None:
             st.error("Not connected to the database.")
             return
 
         try:
-            cursor = self.conn.cursor()
-            cursor.execute(f"SELECT * FROM {table_name}")
-            result = cursor.fetchall()
-            st.table(result)
+            query = text(f"SELECT * FROM {table_name}")
+            with self.engine.connect() as connection:
+                result = connection.execute(query)
+                st.table(result.fetchall())
         except Exception as error:
             st.error(f"Error printing table: {error}")
-        finally:
-            cursor.close()
 
     def select_table(self):
-        if self.conn is None:
+        if self.engine is None:
             st.error("Not connected to the database.")
             return None
 
         selected_table = st.selectbox("Select a table", self.tables)
         if selected_table:
-            cursor = self.conn.cursor()
-            cursor.execute(f'SELECT MAX("DATE_ID") from {selected_table}')
-            result = cursor.fetchall()
-            st.write(f"Latest date in the **{selected_table}** :")
-            st.write(result[0][0])
+            query = text(f'SELECT MAX("DATE_ID") from {selected_table}')
+            with self.engine.connect() as connection:
+                result = connection.execute(query)
+                st.write(f"Latest date in the **{selected_table}** :")
+                st.write(result.fetchone()[0])
 
         self.selected_table = selected_table
         return selected_table
@@ -72,33 +69,29 @@ class DatabaseManager:
 
 class UploadButton:
     def __init__(self):
-        self.conn = None
+        self.engine = None
         self.selected_table = None
 
     def connect_to_database(self):
         try:
-            db_connector = DatabaseConnector()
-            self.conn = db_connector.connect()
+            self.engine = get_db_connection()
         except Exception as error:
             st.error(f"Error connecting to the database: {error}")
 
     def run_query(self, query):
-        if self.conn is None:
+        if self.engine is None:
             st.error("Not connected to the database.")
             return
 
         try:
-            cursor = self.conn.cursor()
-            cursor.execute(query)
-            result = cursor.fetchall()
-            st.table(result)
+            with self.engine.connect() as connection:
+                result = connection.execute(text(query))
+                st.table(result.fetchall())
         except Exception as error:
             st.error(f"Error running the query: {error}")
-        finally:
-            cursor.close()
 
     def upload_button(self, selected_table):
-        if self.conn is None:
+        if self.engine is None:
             st.error("Not connected to the database.")
             return
 
@@ -112,22 +105,19 @@ class UploadButton:
                     df = pd.read_csv(uploaded_file)
 
                     # Insert the data into the PostgreSQL database
-                    cursor = self.conn.cursor()
-                    csv_buffer = io.StringIO()
-                    df.to_csv(csv_buffer, index=False, header=False)
-                    csv_buffer.seek(0)
-                    cursor.copy_expert(
-                        f"COPY {selected_table} FROM STDIN WITH CSV DELIMITER ','",
-                        csv_buffer,
-                    )
+                    with self.engine.begin() as connection:
+                        csv_buffer = io.StringIO()
+                        df.to_csv(csv_buffer, index=False, header=False)
+                        csv_buffer.seek(0)
+                        connection.execute(
+                            text(
+                                f"COPY {selected_table} FROM STDIN WITH CSV DELIMITER ','"
+                            ),
+                            csv_buffer,
+                        )
 
-                    # Commit the changes
-                    self.conn.commit()
                     st.success(
                         f"File '{uploaded_file.name}' uploaded and data inserted into the database!"
                     )
-                    cursor.close()
             except Exception as error:
                 st.error(f"Error uploading files and inserting data: {error}")
-                self.conn.rollback()
-                cursor.close()
