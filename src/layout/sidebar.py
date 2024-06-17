@@ -108,15 +108,12 @@ def querylte():
                     query = text(f"SELECT * FROM {selected_table} WHERE {conditions}")
 
                 df = pd.read_sql(query, db_connection)
-                
-                # Return selected_table and df
                 return selected_table, df
             else:
                 st.warning("Please select at least one Site ID and click Submit.")
         else:
             st.warning("Please select a table.")
 
-    # If no table is selected or no siteid is selected, return None
     return None, None
 
 

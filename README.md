@@ -5,7 +5,7 @@
 [![OS - Windows](https://img.shields.io/badge/OS-Windows-blue?logo=windows&logoColor=white)](https://www.microsoft.com/ "Go to Microsoft homepage")
 ![maintained - yes](https://img.shields.io/badge/maintained-yes-blue)
 
-# My Jarvis App
+# Jarvis
 
 This is a Streamlit app for programming Python with Streamlit, Pandas, Plotly, Seaborn, and Matplotlib.
 
