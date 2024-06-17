@@ -1,7 +1,7 @@
 import streamlit as st
 from config.navbar import navbar
 from config.page_config import page_config
-from layout.upload import DatabaseManager, UploadButton
+from layout.upload import DatabaseManager, UploadButton, DeleteDuplicate
 from layout.sidebar import sidebar
 from layout.ltedaily import LteDaily
 from utils.db_process import DatabaseUtils
@@ -41,6 +41,9 @@ def get_page_content(
         uploadbttn = UploadButton()
         uploadbttn.connect_to_database()
         uploadbttn.upload_button(selected_table)
+        delete_duplicate = DeleteDuplicate()
+        delete_duplicate.connect_to_database()
+        delete_duplicate.delete_duplicate(selected_table)
     elif page == "LTE":
         if selected_table and df is not None:
             lte_daily = LteDaily(db_utils)

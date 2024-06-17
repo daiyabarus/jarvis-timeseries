@@ -9,15 +9,15 @@ def navbar():
 
     styles = {
         "nav": {
-            "background-color": "royalblue",
+            "background-color": "#E60000",
             "justify-content": "center",
         },
         "img": {
-            "padding-right": "14px",
+            "padding-right": "12px",
         },
         "span": {
             "color": "white",
-            "padding": "14px",
+            "padding": "12px",
             "font-family": "Ericsson Hilda Light",
         },
         "active": {
