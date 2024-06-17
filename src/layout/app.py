@@ -22,7 +22,7 @@ def run_app():
     db_utils.connect_to_database()
 
     if page not in ["Upload", "Jarvis", "Github", "About"]:
-        selected_table, df = sidebar()
+        selected_table, df = sidebar(page)
     else:
         selected_table, df = None, None
 

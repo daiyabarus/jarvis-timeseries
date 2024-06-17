@@ -1,3 +1,9 @@
+[![daiyabarus - jarvis-timeseries](https://img.shields.io/static/v1?label=daiyabarus&message=jarvis-timeseries&color=blue&logo=github)](https://github.com/daiyabarus/jarvis-timeseries "Go to GitHub repo")
+[![Python Version](https://img.shields.io/badge/Python-3.12-blue)](https://www.python.org/downloads/release/python-3123/)
+[![License](https://img.shields.io/badge/License-MIT-blue)](#license)
+
+
+
 # My Jarvis App
 
 This is a Streamlit app for programming Python with Streamlit, Pandas, Plotly, Seaborn, and Matplotlib.
@@ -30,9 +36,5 @@ To set up and run the Streamlit app, follow these steps:
 
 Once the Streamlit app is running, you can access it in your web browser at `http://localhost:8501`. The app provides a user interface for programming Python with Streamlit, Pandas, Plotly, Seaborn, and Matplotlib. You can use it to visualize data, create interactive plots, and explore different Python programming concepts.
 
-## License
-
-This project is licensed under the [MIT License](LICENSE).
-```
-
-Please note that the above contents are a template and you may need to modify them based on your specific project requirements.
+## Reference
+- **Puffin:** https://github.com/lpapaspyros/puffin
