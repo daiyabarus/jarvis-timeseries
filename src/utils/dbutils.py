@@ -8,10 +8,10 @@ DB_PORT = "5432"
 
 
 def get_db_connection():
-  # Creating the database connection URL
-  db_url = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+    # Creating the database connection URL
+    db_url = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
-  # Creating the SQLAlchemy engine
-  engine = create_engine(db_url)
+    # Creating the SQLAlchemy engine
+    engine = create_engine(db_url)
 
-  return engine
+    return engine

@@ -3,6 +3,7 @@ from utils.dbutils import get_db_connection
 import pandas as pd
 import io
 from sqlalchemy import text
+from utils.db_con import DatabaseConnector
 
 
 class DatabaseManager:
@@ -58,45 +59,59 @@ class DatabaseManager:
 
         selected_table = st.selectbox("Select a table", self.tables)
         if selected_table:
-            query = text(f'SELECT MAX("DATE_ID") from {selected_table}')
             with self.engine.connect() as connection:
-                result = connection.execute(query)
+                # Query untuk mendapatkan tanggal terbaru
+                query_latest_date = text(f'SELECT MAX("DATE_ID") from {selected_table}')
+                result_latest_date = connection.execute(query_latest_date)
+                latest_date = result_latest_date.fetchone()[0]
+
+                # Query untuk mendapatkan jumlah baris
+                # query_row_count = text(f'SELECT COUNT(*) from {selected_table}')
+                # result_row_count = connection.execute(query_row_count)
+                # row_count = result_row_count.fetchone()[0]
+
+                # Tampilkan hasil query
                 st.write(f"Latest date in the **{selected_table}** :")
-                st.write(result.fetchone()[0])
+                st.write(latest_date)
+                # st.write(f"Total number rows in the **{selected_table}** :")
+                # st.write(row_count)
 
         self.selected_table = selected_table
         return selected_table
 
-
 class UploadButton:
     def __init__(self):
-        self.engine = None
+        self.conn = None
         self.selected_table = None
 
     def connect_to_database(self):
         try:
-            self.engine = get_db_connection()
+            db_connector = DatabaseConnector()
+            self.conn = db_connector.connect()
         except Exception as error:
             st.error(f"Error connecting to the database: {error}")
 
     def run_query(self, query):
-        if self.engine is None:
+        if self.conn is None:
             st.error("Not connected to the database.")
             return
 
         try:
-            with self.engine.connect() as connection:
-                result = connection.execute(text(query))
-                st.table(result.fetchall())
+            cursor = self.conn.cursor()
+            cursor.execute(query)
+            result = cursor.fetchall()
+            st.table(result)
         except Exception as error:
             st.error(f"Error running the query: {error}")
+        finally:
+            cursor.close()
 
     def upload_button(self, selected_table):
-        if self.engine is None:
+        if self.conn is None:
             st.error("Not connected to the database.")
             return
 
-        st.header('Process to upload csv to table', divider='red')
+        st.header('Process import csv to table', divider='red')
         uploaded_files = st.file_uploader(
             "Upload CSV files", type="csv", accept_multiple_files=True
         )
@@ -107,22 +122,81 @@ class UploadButton:
                     df = pd.read_csv(uploaded_file)
 
                     # Insert the data into the PostgreSQL database
-                    with self.engine.begin() as connection:
-                        csv_buffer = io.StringIO()
-                        df.to_csv(csv_buffer, index=False, header=False)
-                        csv_buffer.seek(0)
-                        connection.execute(
-                            text(
-                                f"COPY {selected_table} FROM STDIN WITH CSV DELIMITER ','"
-                            ),
-                            csv_buffer,
-                        )
+                    cursor = self.conn.cursor()
+                    csv_buffer = io.StringIO()
+                    df.to_csv(csv_buffer, index=False, header=False)
+                    csv_buffer.seek(0)
+                    cursor.copy_expert(
+                        f"COPY {selected_table} FROM STDIN WITH CSV DELIMITER ','",
+                        csv_buffer,
+                    )
 
+                    # Commit the changes
+                    self.conn.commit()
                     st.success(
                         f"File '{uploaded_file.name}' uploaded and data inserted into the database!"
                     )
+                    cursor.close()
             except Exception as error:
                 st.error(f"Error uploading files and inserting data: {error}")
+                self.conn.rollback()
+                cursor.close()
+
+# class UploadButton:
+#     def __init__(self):
+#         self.engine = None
+#         self.selected_table = None
+
+#     def connect_to_database(self):
+#         try:
+#             self.engine = get_db_connection()
+#         except Exception as error:
+#             st.error(f"Error connecting to the database: {error}")
+
+#     def run_query(self, query):
+#         if self.engine is None:
+#             st.error("Not connected to the database.")
+#             return
+
+#         try:
+#             with self.engine.connect() as connection:
+#                 result = connection.execute(text(query))
+#                 st.table(result.fetchall())
+#         except Exception as error:
+#             st.error(f"Error running the query: {error}")
+
+#     def upload_button(self, selected_table):
+#         if self.engine is None:
+#             st.error("Not connected to the database.")
+#             return
+
+#         st.header('Process import csv to table', divider='red')
+#         uploaded_files = st.file_uploader(
+#             "Upload CSV files", type="csv", accept_multiple_files=True
+#         )
+#         if uploaded_files is not None:
+#             try:
+#                 for uploaded_file in uploaded_files:
+#                     # Process each uploaded file
+#                     df = pd.read_csv(uploaded_file)
+
+#                     # Insert the data into the PostgreSQL database
+#                     with self.engine.begin() as connection:
+#                         csv_buffer = io.StringIO()
+#                         df.to_csv(csv_buffer, index=False, header=False)
+#                         csv_buffer.seek(0)
+
+#                         # Use read_sql to execute the COPY command
+#                         connection.execute(
+#                             text(f"COPY {selected_table} FROM STDIN WITH CSV DELIMITER ','"),
+#                             csv_buffer.getvalue()
+#                         )
+
+#                     st.success(
+#                         f"File '{uploaded_file.name}' uploaded and data inserted into the database!"
+#                     )
+#             except Exception as error:
+#                 st.error(f"Error uploading files and inserting data: {error}")
 
 class DeleteDuplicate:
     def __init__(self):

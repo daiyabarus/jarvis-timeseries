@@ -1,6 +1,6 @@
 from streamlit_navigation_bar import st_navbar
 
-# TAG: navbar is configuration for TOP the navigation bar
+# TAG: navbar is configuration for the navigation bar
 
 
 def navbar():

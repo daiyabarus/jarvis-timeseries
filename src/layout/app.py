@@ -47,6 +47,6 @@ def get_page_content(
     elif page == "LTE":
         if selected_table and df is not None:
             lte_daily = LteDaily(db_utils)
-            lte_daily.run(selected_table, df)
+            lte_daily.run(df)
         else:
             st.warning("Please select a table and SITEID from the sidebar.")
