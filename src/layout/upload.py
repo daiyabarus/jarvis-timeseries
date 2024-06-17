@@ -61,7 +61,7 @@ class DatabaseManager:
         selected_table = st.selectbox("Select a table", self.tables)
         if selected_table:
             cursor = self.conn.cursor()
-            cursor.execute(f"SELECT MAX(DATE) from {selected_table}")
+            cursor.execute(f'SELECT MAX("DATE_ID") from {selected_table}')
             result = cursor.fetchall()
             st.write(f"Latest date in the **{selected_table}** :")
             st.write(result[0][0])

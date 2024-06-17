@@ -51,7 +51,7 @@ def getlte():
     df = db_utils.get_table_dataframe()
 
     if df is not None:
-        filter = DynamicFilters(df, filters=["siteid", "neid", "Band Type"])
+        filter = DynamicFilters(df, filters=["neid", "CELL_NAME", "sector"])
     else:
         filter = None
         st.warning("No data available for the selected table.")
