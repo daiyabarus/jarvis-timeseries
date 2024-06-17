@@ -1,8 +1,9 @@
-[![daiyabarus - jarvis-timeseries](https://img.shields.io/static/v1?label=daiyabarus&message=jarvis-timeseries&color=blue&logo=github)](https://github.com/daiyabarus/jarvis-timeseries "Go to GitHub repo")
-[![Python Version](https://img.shields.io/badge/Python-3.12-blue)](https://www.python.org/downloads/release/python-3123/)
+[![daiyabarus - jarvis-timeseries](https://img.shields.io/static/v1?label=daiyabarus&message=jarvis&color=blue&logo=github)](https://github.com/daiyabarus/jarvis-timeseries "Go to GitHub repo")
+[![Made with Python](https://img.shields.io/badge/Python->=3.12-blue?logo=python&logoColor=white)](https://python.org "Go to Python homepage")
 [![License](https://img.shields.io/badge/License-MIT-blue)](#license)
-
-
+[![Made with PostgreSQL](https://img.shields.io/badge/PostgreSQL-13-blue?logo=postgresql&logoColor=white)](https://www.postgresql.org/ "Go to PostgresSQL homepage")
+[![OS - Windows](https://img.shields.io/badge/OS-Windows-blue?logo=windows&logoColor=white)](https://www.microsoft.com/ "Go to Microsoft homepage")
+![maintained - yes](https://img.shields.io/badge/maintained-yes-blue)
 
 # My Jarvis App
 
