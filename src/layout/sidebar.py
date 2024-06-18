@@ -10,7 +10,6 @@ class DatabaseHandler:
     def __init__(self, db_path: str):
         self.db_path = db_path
         self.connection = None
-        self.tables = []
 
     def connect(self):
         self.connection = sqlite3.connect(self.db_path)
@@ -18,8 +17,8 @@ class DatabaseHandler:
     def get_tables(self):
         if self.connection:
             query = "SELECT name FROM sqlite_master WHERE type='table';"
-            self.tables = pd.read_sql_query(query, self.connection)["name"].tolist()
-        return self.tables
+            tables = pd.read_sql_query(query, self.connection)["name"].tolist()
+            return tables
 
     def get_table_data(self, table_name: str):
         if self.connection:
@@ -48,9 +47,15 @@ def sidebar(page: str,) -> Dict[str, Any]:
         )
         sac.divider(color="black", key="title")
 
-        db_path = "database/database.db"
-        db_handler = DatabaseHandler(db_path)
-        db_handler.connect()
+        # File uploader for SQLite database
+        db_file = st.file_uploader("Upload SQLite Database", type="db")
+        if db_file:
+            db_path = db_file.name
+            with open(db_path, "wb") as f:
+                f.write(db_file.getbuffer())
+
+            db_handler = DatabaseHandler(db_path)
+            db_handler.connect()
 
         # Select table
         tables = db_handler.get_tables()
