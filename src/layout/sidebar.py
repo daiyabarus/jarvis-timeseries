@@ -3,6 +3,7 @@ import streamlit as st
 import sqlite3
 import pandas as pd
 from typing import Any, Dict
+import streamlit_antd_components as sac
 
 
 class DatabaseHandler:
@@ -32,15 +33,28 @@ class DatabaseHandler:
 
 
 def sidebar(page: str) -> Dict[str, Any]:
+    side_bar_mods()
     db_handler = None
     options = {"selected_table": None, "dataframe": None}
-
     with st.sidebar:
-        st.title("Database Browser")
+        # st.title("Database Browser")
+        col1, col2 = st.columns(2)
+        col1.image("assets/jarvis.png", width=200)
+        col2.markdown("# ")
+        col2.markdown("# ")
+        st.markdown(
+            "<h3 style='text-align: center; color: grey;'>Easy Dashboard</h3>",
+            unsafe_allow_html=True,
+        )
+        sac.divider(color="black", key="title")
 
-        # Select or input database file
-        db_path = st.text_input("Database Path", value="example.db")
-        if st.button("Connect to Database"):
+        # File uploader for SQLite database
+        db_file = st.file_uploader("Upload SQLite Database", type="db")
+        if db_file:
+            db_path = db_file.name
+            with open(db_path, "wb") as f:
+                f.write(db_file.getbuffer())
+
             db_handler = DatabaseHandler(db_path)
             db_handler.connect()
 
@@ -52,48 +66,49 @@ def sidebar(page: str) -> Dict[str, Any]:
             if selected_table:
                 # Query table
                 data = db_handler.get_table_data(selected_table)
-                st.dataframe(data)
+                # st.dataframe(data)
 
                 options["selected_table"] = selected_table
                 options["dataframe"] = data
 
                 # Store headers
-                if page == "NR":
-                    options["DATE_ID"] = st.select_slider(
-                        "DATE_ID", options=data["DATE_ID"].unique().tolist()
+                if page == "NR" or page == "LTE" or page == "GSM":
+                    col1, col2 = st.columns(2)
+                    min_date = col1.selectbox(
+                        "Min DATE_ID", options=data["DATE_ID"].unique().tolist()
                     )
-                    options["ERBS"] = st.multiselect(
-                        "ERBS", options=data["ERBS"].unique().tolist()
+                    max_date = col2.selectbox(
+                        "Max DATE_ID", options=data["DATE_ID"].unique().tolist()
                     )
-                    options["NRCELL_ID"] = st.multiselect(
-                        "NRCELL_ID", options=data["NRCELL_ID"].unique().tolist()
-                    )
-                elif page == "LTE":
-                    options["DATE_ID"] = st.select_slider(
-                        "DATE_ID", options=data["DATE_ID"].unique().tolist()
-                    )
-                    options["ERBS"] = st.multiselect(
-                        "ERBS", options=data["ERBS"].unique().tolist()
-                    )
-                    options["EUTRANCELL"] = st.multiselect(
-                        "EUTRANCELL", options=data["EUTRANCELL"].unique().tolist()
-                    )
-                elif page == "GSM":
-                    options["DATE_ID"] = st.select_slider(
-                        "DATE_ID", options=data["DATE_ID"].unique().tolist()
-                    )
-                    options["BSC"] = st.multiselect(
-                        "BSC", options=data["BSC"].unique().tolist()
-                    )
-                    options["GERANCELL"] = st.multiselect(
-                        "GERANCELL", options=data["GERANCELL"].unique().tolist()
-                    )
+                    options["DATE_ID"] = (min_date, max_date)
+
+                    if page == "NR":
+                        options["ERBS"] = st.multiselect(
+                            "ERBS", options=data["ERBS"].unique().tolist()
+                        )
+                        options["NRCELL_ID"] = st.multiselect(
+                            "NRCELL_ID", options=data["NRCELL_ID"].unique().tolist()
+                        )
+                    elif page == "LTE":
+                        options["ERBS"] = st.multiselect(
+                            "ERBS", options=data["ERBS"].unique().tolist()
+                        )
+                        options["EUTRANCELL"] = st.multiselect(
+                            "EUTRANCELL", options=data["EUTRANCELL"].unique().tolist()
+                        )
+                    elif page == "GSM":
+                        options["BSC"] = st.multiselect(
+                            "BSC", options=data["BSC"].unique().tolist()
+                        )
+                        options["GERANCELL"] = st.multiselect(
+                            "GERANCELL", options=data["GERANCELL"].unique().tolist()
+                        )
 
                 # Run query button
                 if st.button("Run Query"):
                     query = f"SELECT * FROM {selected_table} WHERE 1=1"
                     if "DATE_ID" in options:
-                        query += f" AND DATE_ID='{options['DATE_ID']}'"
+                        query += f" AND DATE_ID BETWEEN '{options['DATE_ID'][0]}' AND '{options['DATE_ID'][1]}'"
                     if "ERBS" in options and options["ERBS"]:
                         query += f" AND ERBS IN ({', '.join([f'\"{x}\"' for x in options['ERBS']])})"
                     if "NRCELL_ID" in options and options["NRCELL_ID"]:
@@ -112,3 +127,24 @@ def sidebar(page: str) -> Dict[str, Any]:
 
     return options
 
+
+def side_bar_mods():
+    html_injection = """
+    <style>
+    div[data-testid="stSidebarUserContent"] {
+        padding-top: 3rem;
+    }
+    </style>
+    """
+    st.markdown(html_injection, unsafe_allow_html=True)
+
+    html_injection = """
+    <style>
+    .st-emotion-cache-dvne4q {
+        padding-right: 1rem;
+        padding-bottom: 3rem;
+        padding-left: 1rem;
+    }
+    </style>
+    """
+    st.markdown(html_injection, unsafe_allow_html=True)
