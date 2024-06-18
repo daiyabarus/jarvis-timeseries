@@ -37,8 +37,11 @@ class GsmDaily:
         if self.data is not None:
             self.transform_data()
 
-            # Filter by SECTOR and plot charts
-            for sector in [1, 2, 3]:
+            # Create three columns for each sector
+            col1, col2, col3 = st.columns(3)
+
+            # Filter by SECTOR and plot charts in each column
+            for sector, col in zip([1, 2, 3], [col1, col2, col3]):
                 sector_data = self.data[self.data["SECTOR"] == sector]
                 fig = px.line(
                     sector_data,
@@ -53,7 +56,7 @@ class GsmDaily:
                     xaxis_title=None,
                     yaxis_title=None,
                     legend_title_text="GERANCELL",
-                    xaxis=dict(tickformat="%m/%d/%y"),
+                    xaxis=dict(tickformat="%m/%d/%y", tickangle=45),
                     legend=dict(
                         orientation="v",
                         yanchor="top",
@@ -63,7 +66,7 @@ class GsmDaily:
                     ),
                     autosize=True,
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                col.plotly_chart(fig, use_container_width=True)
 
 
 def gsm_daily_page(df: pd.DataFrame):
