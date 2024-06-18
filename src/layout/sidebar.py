@@ -32,7 +32,7 @@ class DatabaseHandler:
             self.connection.close()
 
 
-def sidebar(page: str) -> Dict[str, Any]:
+def sidebar(page: str,) -> Dict[str, Any]:
     side_bar_mods()
     db_handler = None
     options = {"selected_table": None, "dataframe": None}
@@ -48,21 +48,14 @@ def sidebar(page: str) -> Dict[str, Any]:
         )
         sac.divider(color="black", key="title")
 
-        # File uploader for SQLite database
-        db_file = st.file_uploader("Upload SQLite Database", type="db")
-        if db_file:
-            db_path = db_file.name
-            with open(db_path, "wb") as f:
-                f.write(db_file.getbuffer())
+        db_path = "database/database.db"
+        db_handler = DatabaseHandler(db_path)
+        db_handler.connect()
 
-            db_handler = DatabaseHandler(db_path)
-            db_handler.connect()
-
-        if db_handler:
-            # Select table
-            tables = db_handler.get_tables()
-            selected_table = st.selectbox("Select Table", tables)
-
+        # Select table
+        tables = db_handler.get_tables()
+        if tables:
+            selected_table = st.selectbox("Select Table", tables, key="selected_table")
             if selected_table:
                 # Query table
                 data = db_handler.get_table_data(selected_table)
@@ -72,36 +65,50 @@ def sidebar(page: str) -> Dict[str, Any]:
                 options["dataframe"] = data
 
                 # Store headers
-                if page == "NR" or page == "LTE" or page == "GSM":
+                if page in ["NR", "LTE", "GSM"]:
                     col1, col2 = st.columns(2)
                     min_date = col1.selectbox(
-                        "Min DATE_ID", options=data["DATE_ID"].unique().tolist()
+                        "Min DATE_ID",
+                        options=data["DATE_ID"].unique().tolist(),
+                        key="min_date",
                     )
                     max_date = col2.selectbox(
-                        "Max DATE_ID", options=data["DATE_ID"].unique().tolist()
+                        "Max DATE_ID",
+                        options=data["DATE_ID"].unique().tolist(),
+                        key="max_date",
                     )
                     options["DATE_ID"] = (min_date, max_date)
 
                     if page == "NR":
                         options["ERBS"] = st.multiselect(
-                            "ERBS", options=data["ERBS"].unique().tolist()
+                            "ERBS",
+                            options=data["ERBS"].unique().tolist(),
+                            key="nr_erbs",
                         )
                         options["NRCELL_ID"] = st.multiselect(
-                            "NRCELL_ID", options=data["NRCELL_ID"].unique().tolist()
+                            "NRCELL_ID",
+                            options=data["NRCELL_ID"].unique().tolist(),
+                            key="nr_nrcell_id",
                         )
                     elif page == "LTE":
                         options["ERBS"] = st.multiselect(
-                            "ERBS", options=data["ERBS"].unique().tolist()
+                            "ERBS",
+                            options=data["ERBS"].unique().tolist(),
+                            key="lte_erbs",
                         )
                         options["EUTRANCELL"] = st.multiselect(
-                            "EUTRANCELL", options=data["EUTRANCELL"].unique().tolist()
+                            "EUTRANCELL",
+                            options=data["EUTRANCELL"].unique().tolist(),
+                            key="lte_eutrancell",
                         )
                     elif page == "GSM":
                         options["BSC"] = st.multiselect(
-                            "BSC", options=data["BSC"].unique().tolist()
+                            "BSC", options=data["BSC"].unique().tolist(), key="gsm_bsc"
                         )
                         options["GERANCELL"] = st.multiselect(
-                            "GERANCELL", options=data["GERANCELL"].unique().tolist()
+                            "GERANCELL",
+                            options=data["GERANCELL"].unique().tolist(),
+                            key="gsm_gerancell",
                         )
 
                 # Run query button
@@ -123,7 +130,7 @@ def sidebar(page: str) -> Dict[str, Any]:
                     result_data = pd.read_sql_query(query, db_handler.connection)
                     st.dataframe(result_data)
 
-            db_handler.close()
+        db_handler.close()
 
     return options
 

@@ -4,6 +4,7 @@ from config.navbar import navbar
 from config.page_config import page_config
 from layout.upload import upload_page
 from layout.sidebar import sidebar
+from layout.gsmdaily import gsm_daily_page  # Adjusted import statement
 import pandas as pd
 
 
@@ -37,5 +38,6 @@ def get_page_content(page: str, df: pd.DataFrame):
         st.write("Running NR page...")
         # Add your logic for the NR page
     elif page == "GSM":
-        st.write("Running GSM page...")
-        # Add your logic for the GSM page
+        gsm_daily_page(
+            df
+        )  # Call the gsm_daily_page function with the filtered dataframe

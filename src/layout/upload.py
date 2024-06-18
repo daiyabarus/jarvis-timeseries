@@ -70,7 +70,10 @@ class DatabaseManager:
         self.cursor.execute(create_table_query)
         df = pd.read_csv(StringIO(csv_data))
         df.to_sql(
-            create_table_query.split(" ")[2], self.conn, if_exists="append", index=False
+            create_table_query.split(" ")[2],
+            self.conn,
+            if_exists="append",
+            index=False,
         )
         self.close()
 
@@ -133,7 +136,10 @@ def upload_page():
 
             schema = [{"name": col, "type": "TEXT"} for col in df.columns]
             schema_df = pd.DataFrame(
-                {"column": combined_columns, "type": ["TEXT"] * len(combined_columns)}
+                {
+                    "column": combined_columns,
+                    "type": ["TEXT"] * len(combined_columns),
+                }
             )
 
             st.write("Edit Schema:")
