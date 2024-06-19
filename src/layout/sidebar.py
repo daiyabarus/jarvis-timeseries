@@ -14,16 +14,18 @@ class DatabaseHandler:
     def connect(self):
         self.connection = sqlite3.connect(self.db_path)
 
-    def get_tables(self):
-        if self.connection:
+    @st.cache_data(ttl=600)
+    def get_tables(_self):
+        if _self.connection:
             query = "SELECT name FROM sqlite_master WHERE type='table';"
-            tables = pd.read_sql_query(query, self.connection)["name"].tolist()
+            tables = pd.read_sql_query(query, _self.connection)["name"].tolist()
             return tables
 
-    def get_table_data(self, table_name: str):
-        if self.connection:
+    @st.cache_data(ttl=600)
+    def get_table_data(_self, table_name: str):
+        if _self.connection:
             query = f"SELECT * FROM {table_name};"
-            data = pd.read_sql_query(query, self.connection)
+            data = pd.read_sql_query(query, _self.connection)
             return data
 
     def close(self):
@@ -40,9 +42,9 @@ def sidebar(
     with st.sidebar:
         # st.title("Database Browser")
         col1, col2 = st.columns(2)
-        col1.image("assets/jarvis.png", width=200)
+        col1.image("assets/jarvis.png", width=50)
         col2.markdown("# ")
-        col2.markdown("# ")
+        # col2.markdown("# ")
         st.markdown(
             "<h3 style='text-align: center; color: grey;'>Easy Dashboard</h3>",
             unsafe_allow_html=True,
@@ -80,12 +82,12 @@ def sidebar(
                 if page in ["NR", "LTE", "GSM"]:
                     col1, col2 = st.columns(2)
                     min_date = col1.selectbox(
-                        "Min DATE_ID",
+                        "Min DATE",
                         options=data["DATE_ID"].unique().tolist(),
                         key="min_date",
                     )
                     max_date = col2.selectbox(
-                        "Max DATE_ID",
+                        "Max DATE",
                         options=data["DATE_ID"].unique().tolist(),
                         key="max_date",
                     )

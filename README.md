@@ -37,5 +37,6 @@ To set up and run the Streamlit app, follow these steps:
 
 Once the Streamlit app is running, you can access it in your web browser at `http://localhost:8501`. The app provides a user interface for programming Python with Streamlit, Pandas, Plotly, Seaborn, and Matplotlib. You can use it to visualize data, create interactive plots, and explore different Python programming concepts.
 
-## Reference
+## Credit to
 - **Puffin:** https://github.com/lpapaspyros/puffin
+- **StreamlitAntdComponents:** https://github.com/nicedouble/StreamlitAntdComponents.git

@@ -1,3 +1,4 @@
+#navbar.py
 from streamlit_navigation_bar import st_navbar
 
 # TAG: navbar is configuration for the navigation bar
