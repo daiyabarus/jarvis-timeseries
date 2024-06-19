@@ -31,7 +31,9 @@ class DatabaseHandler:
             self.connection.close()
 
 
-def sidebar(page: str,) -> Dict[str, Any]:
+def sidebar(
+    page: str,
+) -> Dict[str, Any]:
     side_bar_mods()
     db_handler = None
     options = {"selected_table": None, "dataframe": None}
@@ -47,15 +49,20 @@ def sidebar(page: str,) -> Dict[str, Any]:
         )
         sac.divider(color="black", key="title")
 
-        # File uploader for SQLite database
-        db_file = st.file_uploader("Upload SQLite Database", type="db")
-        if db_file:
-            db_path = db_file.name
-            with open(db_path, "wb") as f:
-                f.write(db_file.getbuffer())
+        # # File uploader for SQLite database
+        # db_file = st.file_uploader("Upload SQLite Database", type="db")
+        # if db_file:
+        #     db_path = db_file.name
+        #     with open(db_path, "wb") as f:
+        #         f.write(db_file.getbuffer())
 
-            db_handler = DatabaseHandler(db_path)
-            db_handler.connect()
+        #     db_handler = DatabaseHandler(db_path)
+        #     db_handler.connect()
+
+        # Hardcoded path to the database
+        db_path = "database/database.db"  # Update this with the correct path
+        db_handler = DatabaseHandler(db_path)
+        db_handler.connect()
 
         # Select table
         tables = db_handler.get_tables()
@@ -132,8 +139,11 @@ def sidebar(page: str,) -> Dict[str, Any]:
                     if "GERANCELL" in options and options["GERANCELL"]:
                         query += f" AND GERANCELL IN ({', '.join([f'\"{x}\"' for x in options['GERANCELL']])})"
 
+                    # result_data = pd.read_sql_query(query, db_handler.connection)
+                    # st.dataframe(result_data)
                     result_data = pd.read_sql_query(query, db_handler.connection)
                     st.dataframe(result_data)
+                    options["filtered_dataframe"] = result_data
 
         db_handler.close()
 
