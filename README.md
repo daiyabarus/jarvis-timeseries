@@ -13,12 +13,6 @@ This is a Streamlit app for programming Python with Streamlit, Pandas, Plotly, S
 
 The project has the following files and folders:
 
-- `src/layout/`: This folder is used to store layout-related files for the Streamlit app.
-- `src/config/`: This folder is used to store configuration files for the Streamlit app.
-- `src/utils/`: This folder is used to store utility files for the Streamlit app.
-- `main.py`: This file is the entry point of the Streamlit app. It contains the main code for the app, including the Streamlit UI and the data processing logic.
-- `requirements.txt`: This file lists the Python dependencies required for the project, including Streamlit, Pandas, Plotly, Seaborn, and Matplotlib.
-
 ## Setup
 
 To set up and run the Streamlit app, follow these steps:
