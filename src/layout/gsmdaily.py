@@ -83,6 +83,7 @@ class GsmDaily:
                 mode="lines+markers",
                 # name="Availability",
                 line=dict(color="#E60000"),
+                showlegend=False,
             ),
             secondary_y=False,
         )

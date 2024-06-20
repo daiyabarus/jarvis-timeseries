@@ -8,6 +8,6 @@ def page_config():
     st.set_page_config(
         page_title="JARVIS",
         layout="wide",
-        page_icon="assets/iron.png",
+        page_icon="assets/signaltower.png",
         initial_sidebar_state="expanded",
     )

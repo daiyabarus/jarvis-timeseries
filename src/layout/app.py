@@ -1,18 +1,54 @@
-# app.py
 import streamlit as st
 from config.navbar import navbar
 from config.page_config import page_config
 from layout.upload import upload_page
+from layout.daily.nrdaily import nr_page
+from layout.daily.ltedaily import lte_page
+from layout.daily.gsmdaily import gsm_daily_page
 from layout.sidebar import sidebar
-
-# from layout.gsmdaily import gsm_daily_page
-from layout.test_gsmdaily import gsm_daily_page
 from typing import Any, Dict
 
 
 def init_session_state():
     if "selected_functionality" not in st.session_state:
         st.session_state["selected_functionality"] = None
+    if "dashboard_tab" not in st.session_state:
+        st.session_state["dashboard_tab"] = "NR"
+
+
+def dashboard_page():
+    page = st.session_state.get("dashboard_tab", "NR")
+
+    if page:
+        options = sidebar(page)
+        filtered_df = options.get("filtered_dataframe")
+
+        if page == "NR":
+            nr_page(filtered_df)
+        elif page == "LTE":
+            lte_page(filtered_df)
+        elif page == "GSM":
+            gsm_daily_page(filtered_df)
+    else:
+        st.write("Error: page is not set properly")
+
+
+def get_page_content(page: str, options: Dict[str, Any]):
+    if page == "Upload":
+        upload_page()
+    elif page == "LTE":
+        filtered_df = options.get("filtered_dataframe")
+        lte_page(filtered_df)
+    elif page == "NR":
+        filtered_df = options.get("filtered_dataframe")
+        nr_page(filtered_df)
+    elif page == "Jarvis":
+        st.write("COMING SOON...")
+    elif page == "About":
+        st.write("COMING SOON...")
+    elif page == "GSM":
+        filtered_df = options.get("filtered_dataframe")
+        gsm_daily_page(filtered_df)
 
 
 def run_app():
@@ -22,30 +58,13 @@ def run_app():
 
     selected_table, options = None, None
 
-    if page not in ["Upload", "Jarvis", "Github", "About"]:
-        options = sidebar(page)
-        selected_table = options.get("selected_table")
+    if page == "Dashboard":
+        dashboard_page()
     else:
-        options = None
+        if page not in ["Upload", "Jarvis", "GitHub", "About"]:
+            options = sidebar(page)
+            selected_table = options.get("selected_table")
+        else:
+            options = None
 
-    get_page_content(page, options)
-
-
-def get_page_content(page: str, options: Dict[str, Any]):
-    if page == "Upload":
-        upload_page()
-    elif page == "LTE":
-        st.write("COMING SOON Running LTE page...")
-        # Add your logic for the LTE page
-    elif page == "NR":
-        st.write("COMING SOON Running NR page...")
-        # Add your logic for the NR page
-    elif page == "Jarvis":
-        st.write("COMING SOON...")
-        # Add your logic here
-    elif page == "About":
-        st.write("COMING SOON...")
-        # Add your logic here
-    elif page == "GSM":
-        filtered_df = options.get("filtered_dataframe")
-        gsm_daily_page(filtered_df)
+        get_page_content(page, options)

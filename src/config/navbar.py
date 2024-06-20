@@ -1,11 +1,11 @@
-#navbar.py
+# navbar.py
 from streamlit_navigation_bar import st_navbar
 
 # TAG: navbar is configuration for the navigation bar
 
 
 def navbar():
-    pages = ["NR", "LTE", "GSM", "Upload", "Jarvis", "GitHub", "About"]
+    pages = ["Dashboard", "Upload", "Jarvis", "GitHub", "About"]
     urls = {"GitHub": "https://github.com/daiyabarus/jarvis-timeseries"}
 
     styles = {

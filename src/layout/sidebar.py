@@ -1,4 +1,3 @@
-# sidebar.py
 import streamlit as st
 import sqlite3
 import pandas as pd
@@ -33,119 +32,118 @@ class DatabaseHandler:
             self.connection.close()
 
 
-def sidebar(
-    page: str,
-) -> Dict[str, Any]:
+def sidebar(page: str) -> Dict[str, Any]:
     side_bar_mods()
     db_handler = None
     options = {"selected_table": None, "dataframe": None}
     with st.sidebar:
-        # st.title("Database Browser")
         col1, col2 = st.columns(2)
-        col1.image("assets/jarvis.png", width=50)
+        col1.image("assets/signaltower.png", width=200)
         col2.markdown("# ")
-        # col2.markdown("# ")
         st.markdown(
-            "<h3 style='text-align: center; color: grey;'>Easy Dashboard</h3>",
+            "<h3 style='text-align: center; color: #000000;'>Behind The Signal</h3>",
             unsafe_allow_html=True,
         )
         sac.divider(color="black", key="title")
 
-        # # File uploader for SQLite database
-        # db_file = st.file_uploader("Upload SQLite Database", type="db")
-        # if db_file:
-        #     db_path = db_file.name
-        #     with open(db_path, "wb") as f:
-        #         f.write(db_file.getbuffer())
-
-        #     db_handler = DatabaseHandler(db_path)
-        #     db_handler.connect()
-
-        # Hardcoded path to the database
-        db_path = "database/database.db"  # Update this with the correct path
+        db_path = "database/database.db"  # TAG this with the correct path
         db_handler = DatabaseHandler(db_path)
         db_handler.connect()
+
+        col1, col2, col3 = st.columns(3)
+        if col1.button("NR"):
+            st.session_state["dashboard_tab"] = "NR"
+        if col2.button("LTE"):
+            st.session_state["dashboard_tab"] = "LTE"
+        if col3.button("GSM"):
+            st.session_state["dashboard_tab"] = "GSM"
 
         # Select table
         tables = db_handler.get_tables()
         if tables:
-            selected_table = st.selectbox("Select Table", tables, key="selected_table")
+            selected_table = st.selectbox(
+                f"Select Table ({page})", tables, key=f"{page}_selected_table"
+            )
             if selected_table:
                 # Query table
-                data = db_handler.get_table_data(selected_table)
-                # st.dataframe(data)
+                try:
+                    data = db_handler.get_table_data(selected_table)
+                    options["selected_table"] = selected_table
+                    options["dataframe"] = data
 
-                options["selected_table"] = selected_table
-                options["dataframe"] = data
+                    # Store headers
+                    if page in ["NR", "LTE", "GSM"]:
+                        col1, col2 = st.columns(2)
+                        min_date = col1.selectbox(
+                            f"Min DATE ({page})",
+                            options=data["DATE_ID"].unique().tolist(),
+                            key=f"{page}_min_date",
+                        )
+                        max_date = col2.selectbox(
+                            f"Max DATE ({page})",
+                            options=data["DATE_ID"].unique().tolist(),
+                            key=f"{page}_max_date",
+                        )
+                        options["DATE_ID"] = (min_date, max_date)
 
-                # Store headers
-                if page in ["NR", "LTE", "GSM"]:
-                    col1, col2 = st.columns(2)
-                    min_date = col1.selectbox(
-                        "Min DATE",
-                        options=data["DATE_ID"].unique().tolist(),
-                        key="min_date",
+                        if page == "NR":
+                            options["ERBS"] = st.multiselect(
+                                f"ERBS ({page})",
+                                options=data["ERBS"].unique().tolist(),
+                                key=f"{page}_erbs",
+                            )
+                            options["NRCELL_ID"] = st.multiselect(
+                                f"NRCELL_ID ({page})",
+                                options=data["NRCELL_ID"].unique().tolist(),
+                                key=f"{page}_nrcell_id",
+                            )
+                        elif page == "LTE":
+                            options["ERBS"] = st.multiselect(
+                                f"ERBS ({page})",
+                                options=data["ERBS"].unique().tolist(),
+                                key=f"{page}_erbs",
+                            )
+                            options["EUTRANCELL"] = st.multiselect(
+                                f"EUTRANCELL ({page})",
+                                options=data["EUTRANCELL"].unique().tolist(),
+                                key=f"{page}_eutrancell",
+                            )
+                        elif page == "GSM":
+                            options["BSC"] = st.multiselect(
+                                f"BSC ({page})",
+                                options=data["BSC"].unique().tolist(),
+                                key=f"{page}_bsc",
+                            )
+                            options["GERANCELL"] = st.multiselect(
+                                f"GERANCELL ({page})",
+                                options=data["GERANCELL"].unique().tolist(),
+                                key=f"{page}_gerancell",
+                            )
+
+                    # Run query button
+                    if st.button(f"Run Query ({page})"):
+                        query = f"SELECT * FROM {selected_table} WHERE 1=1"
+                        if "DATE_ID" in options:
+                            query += f" AND DATE_ID BETWEEN '{options['DATE_ID'][0]}' AND '{options['DATE_ID'][1]}'"
+                        if "ERBS" in options and options["ERBS"]:
+                            query += f" AND ERBS IN ({', '.join([f'\"{x}\"' for x in options['ERBS']])})"
+                        if "NRCELL_ID" in options and options["NRCELL_ID"]:
+                            query += f" AND NRCELL_ID IN ({', '.join([f'\"{x}\"' for x in options['NRCELL_ID']])})"
+                        if "EUTRANCELL" in options and options["EUTRANCELL"]:
+                            query += f" AND EUTRANCELL IN ({', '.join([f'\"{x}\"' for x in options['EUTRANCELL']])})"
+                        if "BSC" in options and options["BSC"]:
+                            query += f" AND BSC IN ({', '.join([f'\"{x}\"' for x in options['BSC']])})"
+                        if "GERANCELL" in options and options["GERANCELL"]:
+                            query += f" AND GERANCELL IN ({', '.join([f'\"{x}\"' for x in options['GERANCELL']])})"
+
+                        result_data = pd.read_sql_query(query, db_handler.connection)
+                        st.dataframe(result_data)
+                        options["filtered_dataframe"] = result_data
+
+                except KeyError as e:
+                    st.error(
+                        f"Error: Please select another Table. The selected table does not contain the expected column: {str(e)}"
                     )
-                    max_date = col2.selectbox(
-                        "Max DATE",
-                        options=data["DATE_ID"].unique().tolist(),
-                        key="max_date",
-                    )
-                    options["DATE_ID"] = (min_date, max_date)
-
-                    if page == "NR":
-                        options["ERBS"] = st.multiselect(
-                            "ERBS",
-                            options=data["ERBS"].unique().tolist(),
-                            key="nr_erbs",
-                        )
-                        options["NRCELL_ID"] = st.multiselect(
-                            "NRCELL_ID",
-                            options=data["NRCELL_ID"].unique().tolist(),
-                            key="nr_nrcell_id",
-                        )
-                    elif page == "LTE":
-                        options["ERBS"] = st.multiselect(
-                            "ERBS",
-                            options=data["ERBS"].unique().tolist(),
-                            key="lte_erbs",
-                        )
-                        options["EUTRANCELL"] = st.multiselect(
-                            "EUTRANCELL",
-                            options=data["EUTRANCELL"].unique().tolist(),
-                            key="lte_eutrancell",
-                        )
-                    elif page == "GSM":
-                        options["BSC"] = st.multiselect(
-                            "BSC", options=data["BSC"].unique().tolist(), key="gsm_bsc"
-                        )
-                        options["GERANCELL"] = st.multiselect(
-                            "GERANCELL",
-                            options=data["GERANCELL"].unique().tolist(),
-                            key="gsm_gerancell",
-                        )
-
-                # Run query button
-                if st.button("Run Query"):
-                    query = f"SELECT * FROM {selected_table} WHERE 1=1"
-                    if "DATE_ID" in options:
-                        query += f" AND DATE_ID BETWEEN '{options['DATE_ID'][0]}' AND '{options['DATE_ID'][1]}'"
-                    if "ERBS" in options and options["ERBS"]:
-                        query += f" AND ERBS IN ({', '.join([f'\"{x}\"' for x in options['ERBS']])})"
-                    if "NRCELL_ID" in options and options["NRCELL_ID"]:
-                        query += f" AND NRCELL_ID IN ({', '.join([f'\"{x}\"' for x in options['NRCELL_ID']])})"
-                    if "EUTRANCELL" in options and options["EUTRANCELL"]:
-                        query += f" AND EUTRANCELL IN ({', '.join([f'\"{x}\"' for x in options['EUTRANCELL']])})"
-                    if "BSC" in options and options["BSC"]:
-                        query += f" AND BSC IN ({', '.join([f'\"{x}\"' for x in options['BSC']])})"
-                    if "GERANCELL" in options and options["GERANCELL"]:
-                        query += f" AND GERANCELL IN ({', '.join([f'\"{x}\"' for x in options['GERANCELL']])})"
-
-                    # result_data = pd.read_sql_query(query, db_handler.connection)
-                    # st.dataframe(result_data)
-                    result_data = pd.read_sql_query(query, db_handler.connection)
-                    st.dataframe(result_data)
-                    options["filtered_dataframe"] = result_data
 
         db_handler.close()
 
