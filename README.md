@@ -1,4 +1,4 @@
-[![daiyabarus - jarvis-timeseries](https://img.shields.io/static/v1?label=daiyabarus&message=jarvis&color=blue&logo=github)](https://github.com/daiyabarus/jarvis-timeseries "Go to GitHub repo")
+[![jarvis-timeseries](https://img.shields.io/static/v1?label=daiyabarus&message=jarvis&color=blue&logo=github)](https://github.com/daiyabarus/jarvis-timeseries "Go to GitHub repo")
 [![Made with Python](https://img.shields.io/badge/Python->=3.12-blue?logo=python&logoColor=white)](https://python.org "Go to Python homepage")
 [![License](https://img.shields.io/badge/License-MIT-blue)](#license)
 [![Made with PostgreSQL](https://img.shields.io/badge/PostgreSQL-13-blue?logo=postgresql&logoColor=white)](https://www.postgresql.org/ "Go to PostgresSQL homepage")
@@ -24,7 +24,7 @@ To set up and run the Streamlit app, follow these steps:
    ```
 3. Run the Streamlit app by executing the following command:
    ```
-   streamlit run main.py
+   streamlit run .\src\main.py
    ```
 
 ## Usage
