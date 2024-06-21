@@ -26,6 +26,46 @@ To set up and run the Streamlit app, follow these steps:
    ```
    streamlit run .\src\main.py
    ```
+## Structure folder
+The project's folder structure is as follows:
+
+```
+├── .streamlit
+│   ├── config.toml
+│   └── secrets.toml
+├── assets
+│   ├── icons
+│   │   ├── icon2g.png
+│   │   ├── icon3g.png
+│   │   ├── icon4g.png
+│   │   └── icon5g.png
+│   └── signaltower.png
+├── database
+│   └── database.db
+├── docs
+│   ├── LICENSE.md
+│   └── README.md
+├── requirements.txt
+└── src
+  ├── config
+  │   ├── navbar.py
+  │   └── page_config.py
+  ├── layout
+  │   ├── app.py
+  │   ├── daily
+  │   │   ├── gsmdaily.py
+  │   │   ├── ltedaily.py
+  │   │   └── nrdaily.py
+  │   └── sidebar.py
+  └── utils
+    ├── db_con.py
+    ├── db_process.py
+    └── dbutils.py
+      ...
+```
+
+
+
 
 ## Usage
 
