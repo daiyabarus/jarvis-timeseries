@@ -7,6 +7,7 @@ from layout.daily.ltedaily import lte_page
 from layout.daily.gsmdaily import gsm_daily_page
 from layout.sidebar import sidebar
 from typing import Any, Dict
+from layout.wiki import wiki
 
 
 def init_session_state():
@@ -34,8 +35,10 @@ def dashboard_page():
 
 
 def get_page_content(page: str, options: Dict[str, Any]):
-    if page == "Upload":
+    if page == "Database":
         upload_page()
+    elif page == "Wiki":
+        wiki()
     elif page == "LTE":
         filtered_df = options.get("filtered_dataframe")
         lte_page(filtered_df)
@@ -43,8 +46,6 @@ def get_page_content(page: str, options: Dict[str, Any]):
         filtered_df = options.get("filtered_dataframe")
         nr_page(filtered_df)
     elif page == "Jarvis":
-        st.write("COMING SOON...")
-    elif page == "About":
         st.write("COMING SOON...")
     elif page == "GSM":
         filtered_df = options.get("filtered_dataframe")
@@ -61,7 +62,7 @@ def run_app():
     if page == "Dashboard":
         dashboard_page()
     else:
-        if page not in ["Upload", "Jarvis", "GitHub", "About"]:
+        if page not in ["Database", "Jarvis", "GitHub", "Wiki"]:
             options = sidebar(page)
             selected_table = options.get("selected_table")
         else:

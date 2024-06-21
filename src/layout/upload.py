@@ -79,7 +79,7 @@ class DatabaseManager:
 
 
 def upload_page():
-    st.title("SQLite3 Database Manager")
+    st.title("Database Manager")
 
     db_file = st.file_uploader("Upload SQLite Database", type="db")
     if db_file:

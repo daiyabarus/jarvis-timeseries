@@ -5,7 +5,7 @@ from streamlit_navigation_bar import st_navbar
 
 
 def navbar():
-    pages = ["Dashboard", "Upload", "Jarvis", "GitHub", "About"]
+    pages = ["Dashboard", "Database", "Jarvis", "Wiki", "GitHub"]
     urls = {"GitHub": "https://github.com/daiyabarus/jarvis-timeseries"}
 
     styles = {
