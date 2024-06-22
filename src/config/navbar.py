@@ -23,9 +23,11 @@ def navbar():
         },
         "active": {
             "background-color": "white",
-            "color": "var(--text-color)",
+            "color": "black",
             "font-weight": "normal",
             "padding": "14px",
+            "border": "1px",
+            "border-radius": "10px",
         },
     }
     options = {

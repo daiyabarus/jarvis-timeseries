@@ -11,7 +11,7 @@ class NRDaily:
     def plot_chart(self):
         st.write("NR Data Visualization Coming Soon...")
 
-def nr_page(df: pd.DataFrame):
+def nr_daily_page(df: pd.DataFrame):
     nr_page = NRDaily(df)
     nr_page.transform_data()
     nr_page.plot_chart()

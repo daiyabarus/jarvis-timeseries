@@ -2,8 +2,8 @@ import streamlit as st
 from config.navbar import navbar
 from config.page_config import page_config
 from layout.upload import upload_page
-from layout.daily.nrdaily import nr_page
-from layout.daily.ltedaily import lte_page
+from layout.daily.nrdaily import nr_daily_page
+from layout.daily.ltedaily import lte_daily_page
 from layout.daily.gsmdaily import gsm_daily_page
 from layout.sidebar import sidebar
 from typing import Any, Dict
@@ -25,9 +25,9 @@ def dashboard_page():
         filtered_df = options.get("filtered_dataframe")
 
         if page == "NR":
-            nr_page(filtered_df)
+            nr_daily_page(filtered_df)
         elif page == "LTE":
-            lte_page(filtered_df)
+            lte_daily_page(filtered_df)
         elif page == "GSM":
             gsm_daily_page(filtered_df)
     else:
@@ -41,10 +41,10 @@ def get_page_content(page: str, options: Dict[str, Any]):
         wiki()
     elif page == "LTE":
         filtered_df = options.get("filtered_dataframe")
-        lte_page(filtered_df)
+        lte_daily_page(filtered_df)
     elif page == "NR":
         filtered_df = options.get("filtered_dataframe")
-        nr_page(filtered_df)
+        nr_daily_page(filtered_df)
     elif page == "Jarvis":
         st.write("COMING SOON...")
     elif page == "GSM":

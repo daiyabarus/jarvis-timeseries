@@ -13,7 +13,7 @@ class LteDaily:
         st.write("LTE Data Visualization Coming Soon...")
 
 
-def lte_page(df: pd.DataFrame):
+def lte_daily_page(df: pd.DataFrame):
     lte_page = LteDaily(df)
     lte_page.transform_data()
     lte_page.plot_chart()
