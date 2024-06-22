@@ -15,17 +15,17 @@
 │   └── README.md
 ├── requirements.txt
 └── src
-  ├── config
-  │   ├── navbar.py
-  │   └── page_config.py
-  ├── layout
-  │   ├── app.py
-  │   ├── daily
-  │   │   ├── gsmdaily.py
-  │   │   ├── ltedaily.py
-  │   │   └── nrdaily.py
-  │   └── sidebar.py
-  └── utils
-    ├── db_con.py
-    ├── db_process.py
-    └── dbutils.py
+    ├── config
+    │   ├── navbar.py
+    │   └── page_config.py
+    ├── layout
+    │   ├── app.py
+    │   ├── daily
+    │   │   ├── gsmdaily.py
+    │   │   ├── ltedaily.py
+    │   │   └── nrdaily.py
+    │   └── sidebar.py
+    └── utils
+      ├── db_con.py
+      ├── db_process.py
+      └── dbutils.py

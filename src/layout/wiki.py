@@ -40,7 +40,7 @@ def wiki():
     )
 
     # Load the flowchart image
-    safe_image_load("Jarvis.svg", width=600)
+    safe_image_load("svg/Jarvis.svg", width=600)
 
     st.divider()
     st.markdown(
@@ -51,10 +51,6 @@ def wiki():
     )
 
     # Load the flowchart image
-    safe_image_load("Dashboard_flow.svg", width=600)
+    safe_image_load("svg/Dashboard_flow.svg", width=600)
 
     st.divider()
-
-
-if __name__ == "__main__":
-    wiki()

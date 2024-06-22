@@ -1,19 +1,25 @@
-from utils.dbcon import DatabaseHandler
+from dbcon import DatabaseHandler
 import pandas as pd
 import streamlit as st
 from streamlit_dynamic_filters import DynamicFilters
-from typing import Optional, List
+from typing import Optional, List, Dict
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
+from config.colors import ColorPalette
+
+st.set_page_config(layout="wide")
 
 
-class GSMDailyAnalyzer:
+class GSMDHourlyAnalyzer:
     def __init__(self):
         self.data = self.get_filtered_gsm_data()
+        self.color_map = None
         if self.data is not None:
             self.transform_data()
+            self.color_map = self.generate_color_map()
 
-    def get_filtered_gsm_data(self) -> Optional[pd.DataFrame]:
+    # @st.cache_resource(experimental_allow_widgets=True)
+    def get_filtered_gsm_data(_self) -> Optional[pd.DataFrame]:
         db_handler = None
         try:
             db_path = "database/database.db"
@@ -21,6 +27,7 @@ class GSMDailyAnalyzer:
             db_handler.connect()
 
             db_data = db_handler.get_table_data("eri_gsm")
+
             df = pd.DataFrame(db_data)
 
             df_filter = DynamicFilters(
@@ -37,6 +44,7 @@ class GSMDailyAnalyzer:
 
     def transform_data(self):
         self.data["SECTOR"] = self.data["GERANCELL"].apply(self.calculate_sector)
+        self.data["CELL_HEADER"] = self.data["GERANCELL"].apply(lambda x: x[:-1])
 
     @staticmethod
     def calculate_sector(gerancell: str) -> int:
@@ -58,23 +66,27 @@ class GSMDailyAnalyzer:
         last_char = gerancell[-1].upper()
         return sector_mapping.get(last_char, 0)
 
-    @staticmethod
-    def gerancell_header(gerancell: pd.Series) -> str:
-        unique_gerancells = gerancell.unique()
-        return (
-            " ".join(unique_gerancells)
-            if len(unique_gerancells) > 1
-            else unique_gerancells[0]
-        )
+    def generate_color_map(self) -> Dict[str, Dict[int, str]]:
+        unique_headers = sorted(self.data["CELL_HEADER"].unique())
+        color_map = {1: {}, 2: {}, 3: {}}
+        for i, header in enumerate(unique_headers):
+            for sector in [1, 2, 3]:
+                color_map[sector][header] = ColorPalette.get_color(i)
+        return color_map
 
     def plot_chart(self, y_column: str, yaxis_range: List[float]):
         if self.data is None:
             st.error("No data available for plotting.")
             return
 
-        cols = st.columns(3)
-        for sector, col in zip([1, 2, 3], cols):
-            with col.container(border=True):
+        col1, col2, col3 = st.columns(3)
+        cont1 = col1.container(border=True)
+        cont2 = col2.container(border=True)
+        cont3 = col3.container(border=True)
+
+        # cols = st.columns(3)
+        for sector, col in zip([1, 2, 3], [cont1, cont2, cont3]):
+            with col:
                 sector_data = self.data[self.data["SECTOR"] == sector]
                 self._create_sector_plot(sector_data, y_column, yaxis_range, sector)
 
@@ -86,38 +98,62 @@ class GSMDailyAnalyzer:
         sector: int,
     ):
         fig = make_subplots(specs=[[{"secondary_y": True}]])
-        fig.add_trace(
-            go.Scatter(
-                x=sector_data["DATE_ID"],
-                y=sector_data[y_column],
-                mode="lines",
-                name=f"Sector {sector}",
-                line=dict(color="#E60000"),
-            ),
-            secondary_y=False,
-        )
+
+        for header in sector_data["CELL_HEADER"].unique():
+            header_data = sector_data[sector_data["CELL_HEADER"] == header]
+            fig.add_trace(
+                go.Scatter(
+                    x=header_data["DATE_ID"],
+                    y=header_data[y_column],
+                    mode="lines+markers",
+                    name=f"{header}{sector}",
+                    line=dict(color=self.color_map[sector][header]),
+                ),
+                secondary_y=False,
+            )
 
         fig.update_layout(
             title_text=f"SECTOR {sector}",
+            margin_r=30,
+            margin_t=50,
+            margin_b=30,
             template="plotly_white",
             yaxis=dict(range=yaxis_range),
-            yaxis2=dict(range=yaxis_range),
             xaxis=dict(tickformat="%m/%d/%y", tickangle=-45),
             autosize=True,
-            legend=dict(
-                orientation="h", yanchor="top", y=-0.3, xanchor="center", x=0.5
-            ),
+            showlegend=True,
             width=600,
-            height=350,
+            height=300,
         )
 
         st.plotly_chart(fig, use_container_width=True)
 
+    def create_legend(self):
+        if self.color_map is None:
+            self.color_map = self.generate_color_map()
 
-def gsm_daily_page():
-    analyzer = GSMDailyAnalyzer()
+        col1, col2, col3 = st.columns(3)
+        containers = [
+            col1.container(border=True),
+            col2.container(border=True),
+            col3.container(border=True),
+        ]
+
+        for sector, container in zip([1, 2, 3], containers):
+            sector_data = self.data[self.data["SECTOR"] == sector]
+            unique_headers = sorted(sector_data["CELL_HEADER"].unique())
+
+            for header in unique_headers:
+                container.markdown(
+                    f'<p style="color:{self.color_map[sector][header]};">● {header}{sector}</p>',
+                    unsafe_allow_html=True,
+                )
+
+
+def gsm_hourly_page():
+    analyzer = GSMDHourlyAnalyzer()
     if analyzer.data is not None:
-        yaxis_ranges = [[0, 100], [-105, -145], [0, 50]]
+        yaxis_ranges = [[0, 100], [-105, -145], [0, 20]]
 
         charts = [
             ("Availability", "Availability", yaxis_ranges[0]),
@@ -132,6 +168,9 @@ def gsm_daily_page():
             )
             analyzer.plot_chart(column, range)
 
+        # Create legend after all charts
+        # analyzer.create_legend()
+
 
 if __name__ == "__main__":
-    gsm_daily_page()
+    gsm_hourly_page()
