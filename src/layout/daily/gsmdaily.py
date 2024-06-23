@@ -53,8 +53,6 @@ class GsmDaily:
             for sector, col in zip([1, 2, 3], [cont1, cont2, cont3]):
                 with col:
                     sector_data = self.data[self.data["SECTOR"] == sector]
-                    gerancell_header = self.gerancell_header(sector_data["GERANCELL"])
-
                     fig = make_subplots(specs=[[{"secondary_y": True}]])
                     fig.add_trace(
                         go.Scatter(

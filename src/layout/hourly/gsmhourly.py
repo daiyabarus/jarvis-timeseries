@@ -5,7 +5,7 @@ from streamlit_dynamic_filters import DynamicFilters
 from typing import Optional, List, Dict
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
-from config.colors import ColorPalette
+from colors import ColorPalette
 
 st.set_page_config(layout="wide")
 

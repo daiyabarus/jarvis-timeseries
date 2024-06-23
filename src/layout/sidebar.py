@@ -154,7 +154,7 @@ def side_bar_mods():
     html_injection = """
     <style>
     div[data-testid="stSidebarUserContent"] {
-        padding-top: 3rem;
+        padding-top: 1.5rem;
     }
     </style>
     """

@@ -64,7 +64,6 @@ def run_app():
     else:
         if page not in ["Database", "Jarvis", "GitHub", "Wiki"]:
             options = sidebar(page)
-            selected_table = options.get("selected_table")
         else:
             options = None
 
