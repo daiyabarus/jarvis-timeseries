@@ -41,6 +41,21 @@ def sidebar(page: str) -> Dict[str, Any]:
         col1.image("assets/signaltower.png", width=200)
         col2.markdown("# ")
         st.markdown(
+            """
+            <style>
+            [data-testid="collapsedControl"] {
+                    display: none
+                }
+            #MainMenu, header, footer {visibility: hidden;}
+            .appview-container .main .block-container
+            {
+                padding-top: 1px;
+                padding-left: 0.5rem;
+                padding-right: 0.5rem;
+                padding-bottom: 1px;
+            }
+            </style>
+            """
             "<h3 style='text-align: center; color: #000000;'>Behind The Signal</h3>",
             unsafe_allow_html=True,
         )
@@ -153,12 +168,55 @@ def sidebar(page: str) -> Dict[str, Any]:
 def side_bar_mods():
     html_injection = """
     <style>
-    div[data-testid="stSidebarUserContent"] {
-        padding-top: 1.5rem;
-    }
+        /* Custom Sidebar Padding */
+        div[data-testid="stSidebarUserContent"] {
+            padding-top: 1rem;
+        }
+
+        .st-emotion-cache-dvne4q {
+            padding-right: 1rem;
+            padding-bottom: 1rem;
+            padding-left: 1rem;
+        }
+
+        /* New CSS Styles */
+        :root{
+            /* ===== Colors ===== */
+            --body-color: #E4E9F7;
+            --sidebar-color: #FFF;
+            --primary-color: #9932CC;
+            --primary-color-light: #F6F5FF;
+            --toggle-color: #DDD;
+            --text-color: #707070;
+
+            /* ====== Transition ====== */
+            --tran-03: all 0.2s ease;
+            --tran-03: all 0.3s ease;
+            --tran-04: all 0.3s ease;
+            --tran-05: all 0.3s ease;
+        }
+
+        body{
+            min-height: 100vh;
+            background-color: var(--body-color);
+            transition: var(--tran-05);
+        }
+
+        ::selection{
+            background-color: var(--primary-color);
+            color: #fff;
+        }
+
+        body.dark{
+            --body-color: #18191a;
+            --sidebar-color: #242526;
+            --primary-color: #3a3b3c;
+            --primary-color-light: #3a3b3c;
+            --toggle-color: #fff;
+            --text-color: #ccc;
+        }
     </style>
     """
-    st.markdown(html_injection, unsafe_allow_html=True)
 
     html_injection = """
     <style>

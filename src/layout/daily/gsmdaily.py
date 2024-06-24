@@ -93,6 +93,31 @@ def gsm_daily_page(df: pd.DataFrame):
     # TAG: Edit on markdown line to change the title of the chart
     gsm_daily = GsmDaily(df)
     st.markdown(
+        """
+        <style>
+        body {
+        background-color: #f4ebe8;
+
+        }
+
+        [data-testid="collapsedControl"] {
+                display: none
+            }
+
+        #MainMenu, header, footer {visibility: hidden;}
+
+        .appview-container .main .block-container
+        {
+            padding-top: 0px;
+            padding-left: 0.5rem;
+            padding-right: 0.5rem;
+            padding-bottom: 0px;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.markdown(
         "<h3 style='text-align: left; color: grey;'>Availability</h3>",
         unsafe_allow_html=True,
     )
