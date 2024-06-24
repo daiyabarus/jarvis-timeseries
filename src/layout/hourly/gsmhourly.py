@@ -1,11 +1,11 @@
-from dbcon import DatabaseHandler
+from utils.dbcon import DatabaseHandler
 import pandas as pd
 import streamlit as st
 from streamlit_dynamic_filters import DynamicFilters
 from typing import Optional, List, Dict
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
-from colors import ColorPalette
+from config.colors import ColorPalette
 
 st.set_page_config(layout="wide")
 

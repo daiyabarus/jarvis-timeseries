@@ -2,7 +2,6 @@ import streamlit as st
 import sqlite3
 import pandas as pd
 from typing import Any, Dict
-import streamlit_antd_components as sac
 
 
 class DatabaseHandler:
@@ -38,28 +37,32 @@ def sidebar(page: str) -> Dict[str, Any]:
     options = {"selected_table": None, "dataframe": None}
     with st.sidebar:
         col1, col2 = st.columns(2)
-        col1.image("assets/signaltower.png", width=200)
+        # col1.image("assets/signaltower.png", width=200)
         col2.markdown("# ")
         st.markdown(
             """
             <style>
             [data-testid="collapsedControl"] {
-                    display: none
+                    display: none;
                 }
             #MainMenu, header, footer {visibility: hidden;}
-            .appview-container .main .block-container
-            {
+            .appview-container .main .block-container {
                 padding-top: 1px;
                 padding-left: 0.5rem;
                 padding-right: 0.5rem;
                 padding-bottom: 1px;
             }
+            .stImage img {
+                display: block;
+                margin-left: auto;
+                margin-right: auto;
+            }
             </style>
-            """
-            "<h3 style='text-align: center; color: #000000;'>Behind The Signal</h3>",
+            <h3 style="text-align: center; color: #000000;">Behind The Signal</h3>
+            """,
             unsafe_allow_html=True,
         )
-        sac.divider(color="black", key="title")
+        # st.divider(color="black", key="title")
 
         db_path = "database/database.db"  # TAG this with the correct path
         db_handler = DatabaseHandler(db_path)

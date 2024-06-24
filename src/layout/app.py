@@ -2,9 +2,9 @@ import streamlit as st
 from config.navbar import navbar
 from config.page_config import page_config
 from layout.upload import upload_page
-from layout.daily.nrdaily import nr_daily_page
-from layout.daily.ltedaily import lte_daily_page
-from layout.daily.gsmdaily import gsm_daily_page
+from layout.daily.pagenrdaily import nr_daily_page
+from layout.daily.pageltedaily import lte_daily_page
+from layout.daily.pagegsmdaily import gsm_daily_page
 from layout.sidebar import sidebar
 from typing import Any, Dict
 from layout.wiki import wiki

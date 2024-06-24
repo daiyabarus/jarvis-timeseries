@@ -96,7 +96,7 @@ def gsm_daily_page(df: pd.DataFrame):
         """
         <style>
         body {
-        background-color: #f4ebe8;
+        background-color: #E4E9F7;
 
         }
 
@@ -118,17 +118,17 @@ def gsm_daily_page(df: pd.DataFrame):
         unsafe_allow_html=True,
     )
     st.markdown(
-        "<h3 style='text-align: left; color: grey;'>Availability</h3>",
+        "<h3 style='text-align: left; color: #707070;'>Availability</h3>",
         unsafe_allow_html=True,
     )
     gsm_daily.plot_chart("Availability", yaxis_ranges)
     st.markdown(
-        "<h3 style='text-align: left; color: grey;'>Interference</h3>",
+        "<h3 style='text-align: left; color: #707070;'>Interference</h3>",
         unsafe_allow_html=True,
     )
     gsm_daily.plot_chart("Interference_UL_ICM_Band4_Band5", yaxis_ranges)
     st.markdown(
-        "<h3 style='text-align: left; color: grey;'>Call Setup Success Rate</h3>",
+        "<h3 style='text-align: left; color: #707070;'>Call Setup Success Rate</h3>",
         unsafe_allow_html=True,
     )
     gsm_daily.plot_chart("Call_Setup_Success_Rate", yaxis_ranges)
