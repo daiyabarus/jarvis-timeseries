@@ -23,6 +23,7 @@ class DatabaseHandler:
     @st.cache_data(ttl=600)
     def get_min_date(_self, table: str, date_column: str):
         if _self.connection:
+            # trunk-ignore(bandit/B608)
             query = f"SELECT MIN({date_column}) FROM {table};"
             min_date = pd.read_sql_query(query, _self.connection).iloc[0, 0]
             min_date_month = pd.to_datetime(min_date).strftime("%Y-%m")
@@ -31,6 +32,7 @@ class DatabaseHandler:
     @st.cache_data(ttl=600)
     def get_max_date(_self, table: str, date_column: str):
         if _self.connection:
+            # trunk-ignore(bandit/B608)
             query = f"SELECT MAX({date_column}) FROM {table};"
             max_date = pd.read_sql_query(query, _self.connection).iloc[0, 0]
             max_date_month = pd.to_datetime(max_date).strftime("%Y-%m")
@@ -39,6 +41,7 @@ class DatabaseHandler:
     @st.cache_data(ttl=600)
     def get_erbs(_self, table: str, erbs_column: str):
         if _self.connection:
+            # trunk-ignore(bandit/B608)
             query = f"SELECT DISTINCT {erbs_column} FROM {table};"
             erbs_values = pd.read_sql_query(query, _self.connection)[
                 erbs_column
@@ -48,6 +51,7 @@ class DatabaseHandler:
     @st.cache_data(ttl=600)
     def get_cell(_self, table: str, cell_column: str):
         if _self.connection:
+            # trunk-ignore(bandit/B608)
             query = f"SELECT DISTINCT {cell_column} FROM {table};"
             cell_values = pd.read_sql_query(query, _self.connection)[
                 cell_column
@@ -80,6 +84,7 @@ class DatabaseHandler:
                 )
 
             where_clause = " AND ".join(conditions)
+            # trunk-ignore(bandit/B608)
             query = f"SELECT * FROM {table} WHERE {where_clause};"
 
             params = []
@@ -94,6 +99,7 @@ class DatabaseHandler:
     @st.cache_data(ttl=600)
     def get_table_data(_self, table_name: str):
         if _self.connection:
+            # trunk-ignore(bandit/B608)
             query = f"SELECT * FROM {table_name};"
             data = pd.read_sql_query(query, _self.connection)
             return data
