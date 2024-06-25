@@ -1,26 +1,51 @@
 # pageltedaily.py
 import pandas as pd
 import streamlit as st
+import streamlit_antd_components as sac
 from dbcon import DatabaseHandler
-from enumdaily.enumdailylte import HeaderLTEDaily
+from enumdaily.enumdailylte import LTEDailyGut
 from streamlit_extras.mandatory_date_range import date_range_picker
 from streamlit_extras.stylable_container import stylable_container
 
 st.set_page_config(layout="wide")
 
+# sac.buttons([sac.ButtonsItem(icon=sac.BsIcon(name='house-door-fill', size=50, color='gray'))], align='center', variant='text'
+
 
 class LTEDataFilterApp:
     def __init__(self, db_path):
         self.db = DatabaseHandler(db_path)
+        self.marginpage()
         self.db.connect()
 
-    def run(self):
-        selected_table = HeaderLTEDaily.TABLE.value
+    def marginpage(self):
+        st.markdown(
+            """
+            <style>
+            [data-testid="collapsedControl"] {
+                    display: none
+                }
+            #MainMenu, header, footer {visibility: hidden;}
+            .appview-container .main .block-container
+            {
+                padding-top: 1px;
+                padding-left: 1rem;
+                padding-right: 1rem;
+                padding-bottom: 1px;
+            }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
 
-        min_date = self.db.get_min_date(selected_table, HeaderLTEDaily.DATEID.value)
-        max_date = self.db.get_max_date(selected_table, HeaderLTEDaily.DATEID.value)
-        erbs_options = self.db.get_erbs(selected_table, HeaderLTEDaily.ERBS.value)
-        cell_options = self.db.get_cell(selected_table, HeaderLTEDaily.CELL.value)
+    def run(self):
+
+        selected_table = LTEDailyGut.TABLE.value
+
+        min_date = self.db.get_min_date(selected_table, LTEDailyGut.DATEID.value)
+        max_date = self.db.get_max_date(selected_table, LTEDailyGut.DATEID.value)
+        erbs_options = self.db.get_erbs(selected_table, LTEDailyGut.ERBS.value)
+        cell_options = self.db.get_cell(selected_table, LTEDailyGut.CELL.value)
 
         # Layout columns
         col1, col2, col3, col4 = st.columns([0.6, 0.6, 0.6, 0.6])
@@ -29,23 +54,27 @@ class LTEDataFilterApp:
         con3 = col3.container()
         con4 = col4.container()
 
+        # MARK : Date range
         with con1:
             with stylable_container(
                 "datepicker",
                 """
                 input {
-                    color: #D3D3D3;
+                    color: #666667;
                     background-color: #FFFFFF !important;
+                    font-size: 12px;
+                    position: relative;
+                    padding: 10px 15px;
                 }
                 div[role="presentation"] div {
-                    color: #D3D3D3;
+                    color: #666667;
                     background-color: #FFFFFF !important;
-                    font-size: 8px !important;
+                    font-size: 12px !important;
                     border-radius: 6px;
                     text-decoration: none;
                 }
                 div[class="st-b3 st-d0"] button {
-                    color: #FFFFFF;
+                    color: #666667;
                     background-color: #FFFFFF !important;
                     border: 1px solid #1E90FF;
                     border-radius: 4px;
@@ -53,33 +82,7 @@ class LTEDataFilterApp:
                     cursor: pointer;
                     transition: all 0.3s ease;
                 }
-                div[class="st-b3 st-d0"] button:hover {
-                    background-color: rgba(30, 144, 255, 0.1) !important;
-                }
-                .stDateInput {
-                    position: relative;
-                    top: 0px;
-                }
-                /* Make the date range picker background transparent */
-                div[data-baseweb="input"] {
-                    background-color: #FFFFFF !important;
-                }
-                /* Ensure the arrow remains visible */
-                div[data-baseweb="input"]::after {
-                    content: "";
-                    position: absolute;
-                    font-size: 8px;
-                    right: 10px;
-                    top: 50%;
-                    transform: translateY(-50%);
-                    width: 0;
-                    height: 0;
-                    border-left: 5px solid transparent;
-                    border-right: 5px solid transparent;
-                    border-top: 5px solid #1E90FF;
-                    pointer-events: none;
-                }
-                """,
+                                """,
             ):
                 min_value = pd.to_datetime(min_date)
                 max_value = pd.to_datetime(max_date)
@@ -89,6 +92,7 @@ class LTEDataFilterApp:
                     default_end=max_value,
                 )
 
+        # MARK : SITEID
         with con2:
             with stylable_container(
                 key="selected_erbs",
@@ -135,11 +139,12 @@ class LTEDataFilterApp:
                 """,
             ):
                 selected_erbs = st.multiselect(
-                    "ERBS",
+                    "SITEID",
                     options=erbs_options,
-                    key="erbs",
+                    key="siteid",
                 )
 
+        # MARK : eutrancell
         with con3:
             with stylable_container(
                 key="selected_cell",
@@ -169,6 +174,7 @@ class LTEDataFilterApp:
                     key="cells",
                 )
 
+        # MARK : Run query filter
         with con4:
             with stylable_container(
                 key="filter1",
@@ -179,14 +185,15 @@ class LTEDataFilterApp:
                     color: white;
                     border: 2px solid indianred;
                     position:relative;
-                    top: 28px;
+                    top: 27px;
                 }
                 """,
             ):
                 filter_button = st.button("FILTER", key="filter1")
 
         def format_date(date):
-            return f"{date.month}/{date.day}/{date.year}"
+            return date.strftime("%m/%d/%Y")
+            # return f"{date.month}/{date.day}/{date.year}" # MARK: for not use leading zero in date
 
         if filter_button:
             query_conditions = ["1=1"]
@@ -194,15 +201,15 @@ class LTEDataFilterApp:
             if data_range:
                 start_date, end_date = data_range
                 query_conditions.append(
-                    f"{HeaderLTEDaily.DATEID.value} BETWEEN '{format_date(start_date)}' AND '{format_date(end_date)}'"
+                    f"{LTEDailyGut.DATEID.value} BETWEEN '{format_date(start_date)}' AND '{format_date(end_date)}'"
                 )
 
             if selected_erbs:
-                erbs_condition = f"{HeaderLTEDaily.ERBS.value} IN ({', '.join([f'\"{erbs}\"' for erbs in selected_erbs])})"
+                erbs_condition = f"{LTEDailyGut.ERBS.value} IN ({', '.join([f'\"{erbs}\"' for erbs in selected_erbs])})"
                 query_conditions.append(erbs_condition)
 
             if selected_cells:
-                cells_condition = f"{HeaderLTEDaily.CELL.value} IN ({', '.join([f'\"{cell}\"' for cell in selected_cells])})"
+                cells_condition = f"{LTEDailyGut.CELL.value} IN ({', '.join([f'\"{cell}\"' for cell in selected_cells])})"
                 query_conditions.append(cells_condition)
 
             where_clause = " AND ".join(query_conditions)
@@ -213,11 +220,18 @@ class LTEDataFilterApp:
 
             st.write(filtered_data)
         else:
-            st.warning(
-                "Please select filter options and click Filter to run the query."
+            sac.alert(
+                label="Alert",
+                description="Please select filter options and click Filter to run the query.",
+                banner=True,
+                icon=True,
+                closable=True,
             )
+            # st.warning(
+            #     "Please select filter options and click Filter to run the query."
+            # )
 
 
 if __name__ == "__main__":
-    app = LTEDataFilterApp(HeaderLTEDaily.DB_PATH.value)
+    app = LTEDataFilterApp(LTEDailyGut.DB_PATH.value)
     app.run()
