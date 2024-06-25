@@ -1,8 +1,9 @@
-import streamlit as st
+from typing import Dict, List
+
 import pandas as pd
 import plotly.graph_objects as go
+import streamlit as st
 from plotly.subplots import make_subplots
-from typing import List, Dict
 
 
 class ChartPlotter:

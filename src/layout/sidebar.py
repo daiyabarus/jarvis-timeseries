@@ -1,7 +1,8 @@
-import streamlit as st
 import sqlite3
-import pandas as pd
 from typing import Any, Dict
+
+import pandas as pd
+import streamlit as st
 
 
 class DatabaseHandler:

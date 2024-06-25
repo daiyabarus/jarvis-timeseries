@@ -1,8 +1,9 @@
 # upload.py
-import streamlit as st
 import sqlite3
-import pandas as pd
 from io import StringIO
+
+import pandas as pd
+import streamlit as st
 
 
 class DatabaseManager:

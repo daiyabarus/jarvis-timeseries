@@ -1,12 +1,14 @@
+from typing import Any, Dict
+
 import streamlit as st
+
 from config.navbar import navbar
 from config.page_config import page_config
-from layout.upload import upload_page
-from layout.daily.pagenrdaily import nr_daily_page
-from layout.daily.pageltedaily import lte_daily_page
 from layout.daily.pagegsmdaily import gsm_daily_page
+from layout.daily.pageltedaily import lte_daily_page
+from layout.daily.pagenrdaily import nr_daily_page
 from layout.sidebar import sidebar
-from typing import Any, Dict
+from layout.upload import upload_page
 from layout.wiki import wiki
 
 
@@ -57,7 +59,7 @@ def run_app():
     page = navbar()
     init_session_state()
 
-    selected_table, options = None, None
+    options = None
 
     if page == "Dashboard":
         dashboard_page()

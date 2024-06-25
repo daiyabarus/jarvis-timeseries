@@ -26,7 +26,9 @@ To set up and run the Streamlit app, follow these steps:
    ```
    streamlit run .\src\main.py
    ```
+
 ## Structure folder
+
 The project's folder structure is as follows:
 
 ```
@@ -64,13 +66,11 @@ The project's folder structure is as follows:
       ...
 ```
 
-
-
-
 ## Usage
 
 Once the Streamlit app is running, you can access it in your web browser at `http://localhost:8501`. The app provides a user interface for programming Python with Streamlit, Pandas, Plotly, Seaborn, and Matplotlib. You can use it to visualize data, create interactive plots, and explore different Python programming concepts.
 
 ## Credit to
+
 - **Puffin:** https://github.com/lpapaspyros/puffin
 - **StreamlitAntdComponents:** https://github.com/nicedouble/StreamlitAntdComponents.git
