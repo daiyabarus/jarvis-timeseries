@@ -48,13 +48,21 @@ class LTEDataFilterApp:
         cell_options = self.db.get_cell(selected_table, LTEDailyGut.CELL.value)
 
         # Layout columns
-        col1, col2, col3, col4 = st.columns([0.6, 0.6, 0.6, 0.6])
+        col1,col2,col3,col4,col5 = st.columns([0.6, 0.6, 0.6, 0.6, 0.1])
+        con5 = col5.container()
         con1 = col1.container()
         con2 = col2.container()
         con3 = col3.container()
         con4 = col4.container()
 
         # MARK : Date range
+        with con5:
+            choice = sac.buttons([sac.ButtonsItem(icon=sac.BsIcon(name='house-door-fill', size=50, color='gray'))], align='center', variant='text')
+                if choice:
+                    st.switch_page("home")
+                else:
+                    None
+
         with con1:
             with stylable_container(
                 "datepicker",
@@ -84,9 +92,9 @@ class LTEDataFilterApp:
                 }
                                 """,
             ):
-                min_value = pd.to_datetime(min_date)
-                max_value = pd.to_datetime(max_date)
-                data_range = date_range_picker(
+                min_value=pd.to_datetime(min_date)
+                max_value=pd.to_datetime(max_date)
+                data_range=date_range_picker(
                     "DATE RANGE",
                     default_start=min_value,
                     default_end=max_value,
@@ -138,7 +146,7 @@ class LTEDataFilterApp:
                 }
                 """,
             ):
-                selected_erbs = st.multiselect(
+            selected_erbs=st.multiselect(
                     "SITEID",
                     options=erbs_options,
                     key="siteid",
@@ -168,7 +176,7 @@ class LTEDataFilterApp:
                 }
                     """,
             ):
-                selected_cells = st.multiselect(
+                selected_cells=st.multiselect(
                     "CELL",
                     options=cell_options,
                     key="cells",
@@ -189,49 +197,53 @@ class LTEDataFilterApp:
                 }
                 """,
             ):
-                filter_button = st.button("FILTER", key="filter1")
+                filter_button=st.button("FILTER", key="filter1")
 
         def format_date(date):
             return date.strftime("%m/%d/%Y")
-            # return f"{date.month}/{date.day}/{date.year}" # MARK: for not use leading zero in date
+            # return f"{date.month}/{date.day}/{date.year}" # MARK: for using not leading zero in date
 
         if filter_button:
-            query_conditions = ["1=1"]
+            query_conditions=["1=1"]
 
             if data_range:
-                start_date, end_date = data_range
+                start_date, end_date=data_range
                 query_conditions.append(
                     f"{LTEDailyGut.DATEID.value} BETWEEN '{format_date(start_date)}' AND '{format_date(end_date)}'"
                 )
 
             if selected_erbs:
-                erbs_condition = f"{LTEDailyGut.ERBS.value} IN ({', '.join([f'\"{erbs}\"' for erbs in selected_erbs])})"
+                erbs_condition=f"{LTEDailyGut.ERBS.value} IN ({', '.join([f'\"{erbs}\"' for erbs in selected_erbs])})"
                 query_conditions.append(erbs_condition)
 
             if selected_cells:
-                cells_condition = f"{LTEDailyGut.CELL.value} IN ({', '.join([f'\"{cell}\"' for cell in selected_cells])})"
+                cells_condition=f"{LTEDailyGut.CELL.value} IN ({', '.join([f'\"{cell}\"' for cell in selected_cells])})"
                 query_conditions.append(cells_condition)
 
-            where_clause = " AND ".join(query_conditions)
-            query = f"SELECT * FROM {selected_table} WHERE {where_clause};"
+            where_clause=" AND ".join(query_conditions)
+            query=f"SELECT * FROM {selected_table} WHERE {where_clause};"
             # st.write(query)
 
-            filtered_data = pd.read_sql_query(query, self.db.connection)
+            filtered_data=pd.read_sql_query(query, self.db.connection)
 
             st.write(filtered_data)
         else:
-            sac.alert(
+            sac.result(
                 label="Alert",
                 description="Please select filter options and click Filter to run the query.",
-                banner=True,
-                icon=True,
-                closable=True,
             )
+            # sac.alert(
+            #     label="Alert",
+            #     description="Please select filter options and click Filter to run the query.",
+            #     banner=True,
+            #     icon=True,
+            #     closable=True,
+            # )
             # st.warning(
             #     "Please select filter options and click Filter to run the query."
             # )
 
 
 if __name__ == "__main__":
-    app = LTEDataFilterApp(LTEDailyGut.DB_PATH.value)
+    app=LTEDataFilterApp(LTEDailyGut.DB_PATH.value)
     app.run()
