@@ -331,7 +331,6 @@ class LTEDataFilterApp:
                 orientation="h", yanchor="top", y=-0.6, xanchor="center", x=0.5
             ),
             width=600,
-            clickmode="event+select",
             height=350,
         )
         fig.update_yaxes(secondary_y=False)
