@@ -1,8 +1,8 @@
 import sqlite3
-from typing import Any, Dict
 
 import pandas as pd
 import streamlit as st
+import streamlit_antd_components as sac
 
 
 class DatabaseHandler:
@@ -13,14 +13,14 @@ class DatabaseHandler:
     def connect(self):
         self.connection = sqlite3.connect(self.db_path)
 
-    @st.cache_data(ttl=600)
+    @st.cache_data(ttl=1800)
     def get_tables(_self):
         if _self.connection:
             query = "SELECT name FROM sqlite_master WHERE type='table';"
             tables = pd.read_sql_query(query, _self.connection)["name"].tolist()
             return tables
 
-    @st.cache_data(ttl=600)
+    @st.cache_data(ttl=1800)
     def get_table_data(_self, table_name: str):
         if _self.connection:
             query = f"SELECT * FROM {table_name};"
@@ -32,38 +32,19 @@ class DatabaseHandler:
             self.connection.close()
 
 
-def sidebar(page: str) -> Dict[str, Any]:
+def sidebar(page: str):
     side_bar_mods()
     db_handler = None
     options = {"selected_table": None, "dataframe": None}
     with st.sidebar:
         col1, col2 = st.columns(2)
-        # col1.image("assets/signaltower.png", width=200)
+        col1.image("assets/signaltower.png", width=200)
         col2.markdown("# ")
         st.markdown(
-            """
-            <style>
-            [data-testid="collapsedControl"] {
-                    display: none;
-                }
-            #MainMenu, header, footer {visibility: hidden;}
-            .appview-container .main .block-container {
-                padding-top: 1px;
-                padding-left: 0.5rem;
-                padding-right: 0.5rem;
-                padding-bottom: 1px;
-            }
-            .stImage img {
-                display: block;
-                margin-left: auto;
-                margin-right: auto;
-            }
-            </style>
-            <h3 style="text-align: center; color: #000000;">Behind The Signal</h3>
-            """,
+            "<h3 style='text-align: center; color: #000000;'>Behind The Signal</h3>",
             unsafe_allow_html=True,
         )
-        # st.divider(color="black", key="title")
+        sac.divider(color="black", key="title")
 
         db_path = "database/database.db"  # TAG this with the correct path
         db_handler = DatabaseHandler(db_path)
@@ -117,15 +98,20 @@ def sidebar(page: str) -> Dict[str, Any]:
                                 key=f"{page}_nrcell_id",
                             )
                         elif page == "LTE":
+                            options["SITEID"] = st.multiselect(
+                                f"SITEID ({page})",
+                                options=data["SITEID"].unique().tolist(),
+                                key=f"{page}_siteid",
+                            )
+                            options["NEID"] = st.multiselect(
+                                f"NEID ({page})",
+                                options=data["NEID"].unique().tolist(),
+                                key=f"{page}_neid",
+                            )
                             options["ERBS"] = st.multiselect(
                                 f"ERBS ({page})",
                                 options=data["ERBS"].unique().tolist(),
                                 key=f"{page}_erbs",
-                            )
-                            options["EUTRANCELL"] = st.multiselect(
-                                f"EUTRANCELL ({page})",
-                                options=data["EUTRANCELL"].unique().tolist(),
-                                key=f"{page}_eutrancell",
                             )
                         elif page == "GSM":
                             options["BSC"] = st.multiselect(
@@ -144,16 +130,18 @@ def sidebar(page: str) -> Dict[str, Any]:
                         query = f"SELECT * FROM {selected_table} WHERE 1=1"
                         if "DATE_ID" in options:
                             query += f" AND DATE_ID BETWEEN '{options['DATE_ID'][0]}' AND '{options['DATE_ID'][1]}'"
-                        if "ERBS" in options and options["ERBS"]:
-                            query += f" AND ERBS IN ({', '.join([f'\"{x}\"' for x in options['ERBS']])})"
-                        if "NRCELL_ID" in options and options["NRCELL_ID"]:
-                            query += f" AND NRCELL_ID IN ({', '.join([f'\"{x}\"' for x in options['NRCELL_ID']])})"
-                        if "EUTRANCELL" in options and options["EUTRANCELL"]:
-                            query += f" AND EUTRANCELL IN ({', '.join([f'\"{x}\"' for x in options['EUTRANCELL']])})"
-                        if "BSC" in options and options["BSC"]:
-                            query += f" AND BSC IN ({', '.join([f'\"{x}\"' for x in options['BSC']])})"
-                        if "GERANCELL" in options and options["GERANCELL"]:
-                            query += f" AND GERANCELL IN ({', '.join([f'\"{x}\"' for x in options['GERANCELL']])})"
+                        if options.get("SITEID"):
+                            query += f" AND SITEID IN ({', '.join([f'"{x}"' for x in options['SITEID']])})"
+                        if options.get("NEID"):
+                            query += f" AND NEID IN ({', '.join([f'"{x}"' for x in options['NEID']])})"
+                        if options.get("ERBS"):
+                            query += f" AND ERBS IN ({', '.join([f'"{x}"' for x in options['ERBS']])})"
+                        if options.get("NRCELL_ID"):
+                            query += f" AND NRCELL_ID IN ({', '.join([f'"{x}"' for x in options['NRCELL_ID']])})"
+                        if options.get("BSC"):
+                            query += f" AND BSC IN ({', '.join([f'"{x}"' for x in options['BSC']])})"
+                        if options.get("GERANCELL"):
+                            query += f" AND GERANCELL IN ({', '.join([f'"{x}"' for x in options['GERANCELL']])})"
 
                         result_data = pd.read_sql_query(query, db_handler.connection)
                         st.dataframe(result_data)
@@ -161,7 +149,7 @@ def sidebar(page: str) -> Dict[str, Any]:
 
                 except KeyError as e:
                     st.error(
-                        f"Error: Please select another Table. The selected table does not contain the expected column: {str(e)}"
+                        f"Error: Please select another Table. The selected table does not contain the expected column: {e!s}"
                     )
 
         db_handler.close()

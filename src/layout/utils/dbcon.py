@@ -62,8 +62,8 @@ class DatabaseHandler:
         cell_column: str,
         start_date: str,
         end_date: str,
-        erbs: str = None,
-        cell: str = None,
+        erbs: str,
+        cell: str,
     ):
         if self.connection:
             conditions = []

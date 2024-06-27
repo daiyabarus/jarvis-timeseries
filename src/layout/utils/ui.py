@@ -7,7 +7,8 @@ def display_gif(gif_path, width=None, height=None):
     """
     Display a GIF from a local file in a Streamlit app.
 
-    Parameters:
+    Parameters
+    ----------
     gif_path (str): Path to the GIF file to be displayed.
     width (str, optional): Width of the GIF (e.g., '500px', '50%'). Defaults to None.
     height (str, optional): Height of the GIF (e.g., '500px', '50%'). Defaults to None.
@@ -35,6 +36,7 @@ def set_page_width(width: int):
     """Set the page width for a Streamlit app with custom CSS.
 
     Args:
+    ----
         width (int): The maximum width in pixels for the content area.
     """
     style = f"""

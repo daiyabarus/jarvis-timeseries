@@ -1,12 +1,11 @@
-from typing import Any, Dict
+from typing import Any
 
 import streamlit as st
-
 from config.navbar import navbar
 from config.page_config import page_config
-from layout.daily.pagegsmdaily import gsm_daily_page
-from layout.daily.pageltedaily import lte_daily_page
-from layout.daily.pagenrdaily import nr_daily_page
+from layout.pagegsmdaily import gsm_daily_page
+from layout.pageltedaily import lte_daily_page
+from layout.pagenrdaily import nr_daily_page
 from layout.sidebar import sidebar
 from layout.upload import upload_page
 from layout.wiki import wiki
@@ -36,7 +35,7 @@ def dashboard_page():
         st.write("Error: page is not set properly")
 
 
-def get_page_content(page: str, options: Dict[str, Any]):
+def get_page_content(page: str, options: dict[str, Any]):
     if page == "Database":
         upload_page()
     elif page == "Wiki":

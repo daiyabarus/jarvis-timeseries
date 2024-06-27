@@ -132,3 +132,8 @@ def gsm_daily_page(df: pd.DataFrame):
         unsafe_allow_html=True,
     )
     gsm_daily.plot_chart("Call_Setup_Success_Rate", yaxis_ranges)
+
+
+if __name__ == "__main__":
+    app = GsmDaily(pd.DataFrame)
+    app.run()

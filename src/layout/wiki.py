@@ -1,7 +1,6 @@
 import os
 
 import streamlit as st
-
 from utils.ui import set_page_width
 
 
@@ -20,7 +19,7 @@ def wiki():
             else:
                 st.warning(f"Image not found: {image_name}")
         except Exception as e:
-            st.error(f"Error loading image {image_name}: {str(e)}")
+            st.error(f"Error loading image {image_name}: {e!s}")
 
     cols = st.columns(4)
     icons = [
