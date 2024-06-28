@@ -1,6 +1,6 @@
 # upload.py
 import sqlite3
-from io import StringIO
+from io import BytesIO, StringIO
 
 import pandas as pd
 import streamlit as st
@@ -34,6 +34,13 @@ class DatabaseManager:
     def count_rows(self, table_name):
         self.connect()
         self.cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
+        count = self.cursor.fetchone()[0]
+        self.close()
+        return count
+
+    def max_date(self, table_name):
+        self.connect()
+        self.cursor.execute(f"SELECT MAX(DATE_ID) FROM {table_name}")
         count = self.cursor.fetchone()[0]
         self.close()
         return count
@@ -78,15 +85,85 @@ class DatabaseManager:
         )
         self.close()
 
+    def insert_excel_to_table(self, table_name, excel_data, file_type):
+        self.connect()
+        if file_type == "xlsb":
+            df = pd.read_excel(
+                BytesIO(excel_data), engine="pyxlsb", sheet_name=0, header=None
+            )
+        else:
+            df = pd.read_excel(BytesIO(excel_data), sheet_name=0, header=None)
+
+        # Assign column names based on the provided header sample
+        df.columns = [
+            "DATE_ID",
+            "ERBS",
+            "SITEID",
+            "NEID",
+            "EutranCell",
+            "Availability",
+            "RRC_SR",
+            "ERAB_SR",
+            "SSSR",
+            "SAR",
+            "S1_Signaling_SR",
+            "Intra_HO_Exe_SR",
+            "Inter_HO_Exe_SR",
+            "Downlink_Traff_Volume",
+            "Uplink_Traff_Volume",
+            "Total_Traff_Volume",
+            "Payload_Total(Gb)",
+            "DLResourceBlockUtilizingRate",
+            "ULResourceBlockUtilizingRate",
+            "LTE_Peak_Active_DL_Users",
+            "LTE_Peak_Active_UL_Users",
+            "UL_INT_PUSCH",
+            "UL_INT_PUCCH",
+            "CellDownlinkAverageThroughput",
+            "CellUplinkAverageThroughput",
+            "User_Downlink_Average_Throughput_Mbps",
+            "User_Uplink_Average_ThroughputMbps",
+            "SE_DAILY",
+            "avgcqinonhom",
+            "CQI>=7",
+            "CSFB_2G",
+            "CSFB_3G",
+            "CSFB_3G_SR",
+            "PagingSuccesRate",
+            "PagingDiscardRate",
+            "pmErabRelAbnormalEnbAct_",
+            "Maximum_User_Number_RRC",
+            "RRC_Connected_User",
+            "pmCellDownTimeAuto_",
+            "PSHO_to_UTRAN_Exe_SR",
+            "IP_Latency",
+            "Active_User",
+            "pmCellDowntimeMan_",
+            "Erab_Drop_Rate",
+            "pmErabRelAbnormalEnbActCdt_",
+            "pmErabRelAbnormalEnbActHo_",
+            "pmErabRelAbnormalEnbActHpr_",
+            "pmErabRelAbnormalEnbActTnFail_",
+            "pmErabRelAbnormalEnbActUeLost_",
+            "pmBadCovEvalReport_",
+            "CQI_Bh",
+            "SE_Bh",
+        ]
+
+        df.to_sql(table_name, self.conn, if_exists="append", index=False)
+        self.close()
+
 
 def upload_page():
     st.title("Database Manager")
 
-    db_file = st.file_uploader("Upload SQLite Database", type="db")
+    # db_file = st.file_uploader("Upload SQLite Database", type="db")
+    db_file = "database/database.db"
     if db_file:
-        db_path = db_file.name
-        with open(db_path, "wb") as f:
-            f.write(db_file.getbuffer())
+        db_path = db_file
+        # db_path = db_file.name
+        # with open(db_path, "wb") as f:
+        #     f.write(db_file.getbuffer())
 
         db_manager = DatabaseManager(db_path)
 
@@ -97,7 +174,9 @@ def upload_page():
             st.write(f"Selected Table: {selected_table}")
 
             row_count = db_manager.count_rows(selected_table)
+            maxdate = db_manager.max_date(selected_table)
             st.write(f"Row count: {row_count}")
+            st.write(f"Max Date: {maxdate}")
 
             table_header = db_manager.get_table_header(selected_table)
             st.write(f"Table Header: {table_header}")
@@ -108,8 +187,10 @@ def upload_page():
 
             if csv_files:
                 for csv_file in csv_files:
+                    # csv_data = StringIO(csv_file.getvalue().decode("utf-8"))
+                    # db_manager.insert_csv_to_table(selected_table, csv_data.read())
                     csv_data = StringIO(csv_file.getvalue().decode("utf-8"))
-                    db_manager.insert_csv_to_table(selected_table, csv_data.read())
+                    db_manager.insert_csv_to_table(selected_table, csv_data.getvalue())
 
                 st.success("CSV files have been imported successfully.")
 
@@ -123,6 +204,20 @@ def upload_page():
                     st.success("Duplicates have been removed.")
                 else:
                     st.warning("Please select columns to check for duplicates.")
+
+            excel_files = st.file_uploader(
+                "Upload Excel files (XLSB or XLSX)",
+                type=["xlsb", "xlsx"],
+                accept_multiple_files=True,
+            )
+
+        if excel_files:
+            for excel_file in excel_files:
+                file_type = excel_file.name.split(".")[-1].lower()
+                excel_data = excel_file.read()
+                db_manager.insert_excel_to_table(selected_table, excel_data, file_type)
+
+            st.success("Excel files have been imported successfully.")
 
         new_table_csv = st.file_uploader("Upload CSV to Create a New Table", type="csv")
         if new_table_csv:

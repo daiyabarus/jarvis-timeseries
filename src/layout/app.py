@@ -4,7 +4,8 @@ import streamlit as st
 from config.navbar import navbar
 from config.page_config import page_config
 from layout.pagegsmdaily import gsm_daily_page
-from layout.pageltedaily import lte_daily_page
+
+# from layout.pageltedaily import lte_daily_page
 from layout.pagenrdaily import nr_daily_page
 from layout.sidebar import sidebar
 from layout.upload import upload_page

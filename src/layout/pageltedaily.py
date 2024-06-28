@@ -2,10 +2,14 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 import streamlit_antd_components as sac
+
+# from layout.enumclass.enumdailylte import LTEDailyGut
 from enumclass.enumdailylte import LTEDailyGut
 from plotly.subplots import make_subplots
 from streamlit_extras.mandatory_date_range import date_range_picker
 from streamlit_extras.stylable_container import stylable_container
+
+# from layout.utils.dbcon import DatabaseHandler
 from utils.dbcon import DatabaseHandler
 
 st.set_page_config(layout="wide")
@@ -340,3 +344,39 @@ class LTEDataFilterApp:
 if __name__ == "__main__":
     app = LTEDataFilterApp(LTEDailyGut.DB_PATH.value)
     app.run()
+
+
+# def create_chart(self, data, cells, title, column, yaxis_range):
+#         fig = go.Figure()
+#         colors = self.colors()
+#         title = self.get_header(cells)
+
+#         for i, cell in enumerate(cells):
+#             cell_data = data[data[LTEDailyGut.CELL.value] == cell]
+#             fig.add_trace(
+#                 go.Scatter(
+#                     x=cell_data["DATE_ID"],
+#                     y=cell_data[column],
+#                     mode="lines",
+#                     name=cell,
+#                     line=dict(color=colors[i % len(colors)]),
+#                     stackgroup='one'  # Add this line to create a stacked area chart
+#                 )
+#             )
+
+#         fig.update_layout(
+#             title_text=f"{title}",
+#             title_x=0,
+#             template="plotly_white",
+#             yaxis=dict(range=yaxis_range),
+#             xaxis=dict(tickformat="%m/%d/%y", tickangle=-45),
+#             autosize=True,
+#             showlegend=True,
+#             legend=dict(
+#                 orientation="h", yanchor="top", y=-0.6, xanchor="center", x=0.5
+#             ),
+#             width=600,
+#             height=350
+#         )
+
+#         return fig

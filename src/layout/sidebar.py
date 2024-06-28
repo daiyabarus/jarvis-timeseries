@@ -11,6 +11,7 @@ class DatabaseHandler:
         self.connection = None
 
     def connect(self):
+        # self.db_path = "database/database.db"
         self.connection = sqlite3.connect(self.db_path)
 
     @st.cache_data(ttl=1800)
@@ -53,106 +54,14 @@ def sidebar(page: str):
         col1, col2, col3 = st.columns(3)
         if col1.button("NR"):
             st.session_state["dashboard_tab"] = "NR"
+            tables = "eri_gut_nr"
         if col2.button("LTE"):
             st.session_state["dashboard_tab"] = "LTE"
+            tables = "eri_gut_lte"
         if col3.button("GSM"):
             st.session_state["dashboard_tab"] = "GSM"
+            tables = "eri_gut_gsm"
 
-        # Select table
-        tables = db_handler.get_tables()
-        if tables:
-            selected_table = st.selectbox(
-                f"Select Table ({page})", tables, key=f"{page}_selected_table"
-            )
-            if selected_table:
-                # Query table
-                try:
-                    data = db_handler.get_table_data(selected_table)
-                    options["selected_table"] = selected_table
-                    options["dataframe"] = data
-
-                    # Store headers
-                    if page in ["NR", "LTE", "GSM"]:
-                        col1, col2 = st.columns(2)
-                        min_date = col1.selectbox(
-                            f"Min DATE ({page})",
-                            options=data["DATE_ID"].unique().tolist(),
-                            key=f"{page}_min_date",
-                        )
-                        max_date = col2.selectbox(
-                            f"Max DATE ({page})",
-                            options=data["DATE_ID"].unique().tolist(),
-                            key=f"{page}_max_date",
-                        )
-                        options["DATE_ID"] = (min_date, max_date)
-
-                        if page == "NR":
-                            options["ERBS"] = st.multiselect(
-                                f"ERBS ({page})",
-                                options=data["ERBS"].unique().tolist(),
-                                key=f"{page}_erbs",
-                            )
-                            options["NRCELL_ID"] = st.multiselect(
-                                f"NRCELL_ID ({page})",
-                                options=data["NRCELL_ID"].unique().tolist(),
-                                key=f"{page}_nrcell_id",
-                            )
-                        elif page == "LTE":
-                            options["SITEID"] = st.multiselect(
-                                f"SITEID ({page})",
-                                options=data["SITEID"].unique().tolist(),
-                                key=f"{page}_siteid",
-                            )
-                            options["NEID"] = st.multiselect(
-                                f"NEID ({page})",
-                                options=data["NEID"].unique().tolist(),
-                                key=f"{page}_neid",
-                            )
-                            options["ERBS"] = st.multiselect(
-                                f"ERBS ({page})",
-                                options=data["ERBS"].unique().tolist(),
-                                key=f"{page}_erbs",
-                            )
-                        elif page == "GSM":
-                            options["BSC"] = st.multiselect(
-                                f"BSC ({page})",
-                                options=data["BSC"].unique().tolist(),
-                                key=f"{page}_bsc",
-                            )
-                            options["GERANCELL"] = st.multiselect(
-                                f"GERANCELL ({page})",
-                                options=data["GERANCELL"].unique().tolist(),
-                                key=f"{page}_gerancell",
-                            )
-
-                    # Run query button
-                    if st.button(f"Run Query ({page})"):
-                        query = f"SELECT * FROM {selected_table} WHERE 1=1"
-                        if "DATE_ID" in options:
-                            query += f" AND DATE_ID BETWEEN '{options['DATE_ID'][0]}' AND '{options['DATE_ID'][1]}'"
-                        if options.get("SITEID"):
-                            query += f" AND SITEID IN ({', '.join([f'"{x}"' for x in options['SITEID']])})"
-                        if options.get("NEID"):
-                            query += f" AND NEID IN ({', '.join([f'"{x}"' for x in options['NEID']])})"
-                        if options.get("ERBS"):
-                            query += f" AND ERBS IN ({', '.join([f'"{x}"' for x in options['ERBS']])})"
-                        if options.get("NRCELL_ID"):
-                            query += f" AND NRCELL_ID IN ({', '.join([f'"{x}"' for x in options['NRCELL_ID']])})"
-                        if options.get("BSC"):
-                            query += f" AND BSC IN ({', '.join([f'"{x}"' for x in options['BSC']])})"
-                        if options.get("GERANCELL"):
-                            query += f" AND GERANCELL IN ({', '.join([f'"{x}"' for x in options['GERANCELL']])})"
-
-                        result_data = pd.read_sql_query(query, db_handler.connection)
-                        st.dataframe(result_data)
-                        options["filtered_dataframe"] = result_data
-
-                except KeyError as e:
-                    st.error(
-                        f"Error: Please select another Table. The selected table does not contain the expected column: {e!s}"
-                    )
-
-        db_handler.close()
 
     return options
 
@@ -169,43 +78,6 @@ def side_bar_mods():
             padding-right: 1rem;
             padding-bottom: 1rem;
             padding-left: 1rem;
-        }
-
-        /* New CSS Styles */
-        :root{
-            /* ===== Colors ===== */
-            --body-color: #E4E9F7;
-            --sidebar-color: #FFF;
-            --primary-color: #9932CC;
-            --primary-color-light: #F6F5FF;
-            --toggle-color: #DDD;
-            --text-color: #707070;
-
-            /* ====== Transition ====== */
-            --tran-03: all 0.2s ease;
-            --tran-03: all 0.3s ease;
-            --tran-04: all 0.3s ease;
-            --tran-05: all 0.3s ease;
-        }
-
-        body{
-            min-height: 100vh;
-            background-color: var(--body-color);
-            transition: var(--tran-05);
-        }
-
-        ::selection{
-            background-color: var(--primary-color);
-            color: #fff;
-        }
-
-        body.dark{
-            --body-color: #18191a;
-            --sidebar-color: #242526;
-            --primary-color: #3a3b3c;
-            --primary-color-light: #3a3b3c;
-            --toggle-color: #fff;
-            --text-color: #ccc;
         }
     </style>
     """
