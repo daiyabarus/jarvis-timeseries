@@ -1,0 +1,41 @@
+[tool.poetry]
+name = "forged-timeseries"
+version = "0.1.0"
+description = ""
+authors = ["daiyabarus <daiyabarus@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+streamlit = "^1.29.0"
+st-pages = "^0.4.5"
+extra-streamlit-components = "^0.1.60"
+sqlalchemy = "^2.0.25"
+streamlit-extras = "^0.3.6"
+omegaconf = "^2.3.0"
+sqlalchemy-utils = "^0.41.1"
+bcrypt = "^4.1.2"
+psycopg2-binary = "^2.9.9"
+hydralit = "^1.0.14"
+flask = "^3.0.0"
+requests = "^2.31.0"
+streamlit-js-eval = "^0.1.5"
+streamlit-server-state = "^0.17.1"
+streamlit-agraph = "^0.0.45"
+st-annotated-text = "^4.0.1"
+streamlit-nested-layout = "^0.1.1"
+streamlit-antd-components = "^0.3.2"
+antlr4-python3-runtime = "4.7.2"
+black = "^24.4.2"
+ruff = "^0.5.0"
+pytest = "^8.2.2"
+pre-commit = "^3.7.1"
+pyright = "^1.1.369"
+pylance = "0.13.0"
+pyarrow = "15.0.0"
+pyxlsb = "^1.0.10"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

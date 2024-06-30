@@ -1,8 +1,11 @@
 line-length = 88
-target-version = "py312"
 
+target-version = "py312"
+lint.fixable = ["ALL"]
+lint.unfixable = []
 exclude = [
     "*.pyi",
+    "venv",
     ]
 lint.select = ["ALL"]
 lint.extend-ignore = [

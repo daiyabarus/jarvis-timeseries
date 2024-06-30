@@ -62,7 +62,6 @@ def sidebar(page: str):
             st.session_state["dashboard_tab"] = "GSM"
             tables = "eri_gut_gsm"
 
-
     return options
 
 

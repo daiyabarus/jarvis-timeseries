@@ -22,7 +22,7 @@ class LTEDataFilterApp:
         self.initialize_app()
 
     def initialize_app(self):
-        self.marginpage()
+        # self.marginpage()
         self.db.connect()
         self.initialize_session_state()
 
@@ -36,24 +36,25 @@ class LTEDataFilterApp:
         if "data_range" not in st.session_state:
             st.session_state["data_range"] = None
 
-    def marginpage(self):
-        st.markdown(
-            """
-            <style>
-            [data-testid="collapsedControl"] {
-                    display: none;
-                }
-            #MainMenu, header, footer {visibility: hidden;}
-            .appview-container .main .block-container {
-                padding-top: 1px;
-                padding-left: 1rem;
-                padding-right: 1rem;
-                padding-bottom: 1rem;
-            }
-            </style>
-            """,
-            unsafe_allow_html=True,
-        )
+    # MARK: - Call margin page from navbar
+    # def marginpage(self):
+    #     st.markdown(
+    #         """
+    #         <style>
+    #         [data-testid="collapsedControl"] {
+    #                 display: none;
+    #             }
+    #         #MainMenu, header, footer {visibility: hidden;}
+    #         .appview-container .main .block-container {
+    #             padding-top: 1px;
+    #             padding-left: 1rem;
+    #             padding-right: 1rem;
+    #             padding-bottom: 1rem;
+    #         }
+    #         </style>
+    #         """,
+    #         unsafe_allow_html=True,
+    #     )
 
     def keep(self, key):
         st.session_state[key] = st.session_state["_" + key]

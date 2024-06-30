@@ -1,5 +1,8 @@
+from typing import ClassVar
+
+
 class ColorPalette:
-    COLORS = [
+    color_codes: ClassVar[list[str]] = [
         "#B8860B",  # Dark Goldenrod
         "#9932CC",  # Dark Orchid
         "#E9967A",  # Dark Salmon
