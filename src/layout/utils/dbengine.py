@@ -18,7 +18,7 @@ def create_db(cfg: DictConfig) -> None:
         conn = engine.connect()
 
         # Creates schemas if not exists
-        for schema in ["general", "service"]:
+        for schema in ["public"]:
             conn.execute(CreateSchema(schema, if_not_exists=True))
             conn.commit()
 

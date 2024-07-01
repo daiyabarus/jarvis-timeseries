@@ -6,13 +6,13 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
 class Base(DeclarativeBase):
-    metadata = MetaData(schema="general")
+    metadata = MetaData(schema="public")
 
 
 class Mdt(Base):
     __tablename__ = "mdt"
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    date: Mapped[date] = mapped_column(Date(), nullable=False)
+    date = mapped_column(Date(), nullable=False)
     site: Mapped[str] = mapped_column(Text(), nullable=False)
     enodebid: Mapped[int] = mapped_column(Integer(), nullable=False)
     ci: Mapped[int] = mapped_column(Integer(), nullable=False)
