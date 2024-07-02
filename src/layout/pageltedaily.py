@@ -13,12 +13,14 @@ from streamlit_extras.mandatory_date_range import date_range_picker
 from streamlit_extras.stylable_container import stylable_container
 
 
+# Load configuration file
 def load_config():
     with open(".streamlit/secrets.toml") as f:
         cfg = OmegaConf.create(toml.loads(f.read()))
     return cfg
 
 
+# Create database session
 def create_session(cfg: DictConfig):
     try:
         db_cfg = cfg.connections.postgresql
@@ -32,8 +34,8 @@ def create_session(cfg: DictConfig):
         return None, None
 
 
+# Page configuration
 st.set_page_config(layout="wide")
-
 st.markdown(
     """
         <style>
@@ -51,6 +53,27 @@ st.markdown(
         """,
     unsafe_allow_html=True,
 )
+
+
+class AppConfig:
+    @staticmethod
+    def configure_streamlit():
+        st.set_page_config(layout="wide")
+        st.markdown(
+            """
+            <style>
+            [data-testid="collapsedControl"] { display: none; }
+            #MainMenu, header, footer { visibility: hidden; }
+            .appview-container .main .block-container {
+                padding-top: 1px;
+                padding-left: 1rem;
+                padding-right: 1rem;
+                padding-bottom: 1rem;
+            }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
 
 
 class LTEDataFilterApp:
@@ -71,12 +94,6 @@ class LTEDataFilterApp:
                 pd.Timestamp.today() - pd.Timedelta(days=8),
                 pd.Timestamp.today(),
             )
-
-    def keep(self, key):
-        st.session_state[key] = st.session_state["_" + key]
-
-    def unkeep(self, key):
-        st.session_state["_" + key] = st.session_state[key]
 
     def run(self):
         self.display_filters()
@@ -210,14 +227,7 @@ class LTEDataFilterApp:
                 }
                 """,
             ):
-                self.unkeep(key)
-                st.multiselect(
-                    label,
-                    options=options,
-                    key="_" + key,
-                    on_change=self.keep,
-                    args=[key],
-                )
+                st.multiselect(label, options=options, key=key)
 
     def process_filter(self):
         if self.filter_button:
@@ -374,7 +384,7 @@ class LTEDataFilterApp:
                 orientation="h", yanchor="top", y=-0.6, xanchor="center", x=0.5
             ),
             width=600,
-            height=350,
+            height=400,
         )
         fig.update_yaxes(secondary_y=False)
         return fig
