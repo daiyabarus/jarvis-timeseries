@@ -135,7 +135,7 @@ def create_chart(df, site, parameter):
         title_x=0.4,
         template="plotly_white",
         xaxis=dict(
-            tickformat="%Y/%m/%d %H:%M",
+            tickformat="%m/%d/%Y %H:%M",
             tickangle=-90,
             type="category",
             tickmode="auto",
@@ -168,13 +168,11 @@ def get_header(cell):
     result.sort()
     final_result = ", ".join(result)
     return f"{final_result}"
-    # return f"{site}: {final_result}"
 
 
 def main():
-    st.title("LTE Hourly Data Viewer")
+    st.title("PRB Utilization Data Viewer")
 
-    # def marginpage(self):
     st.markdown(
         """
         <style>
@@ -274,10 +272,6 @@ def main():
             for site in selected_sites:
                 site_df = df[df["site_id"] == site]
 
-                # st.markdown(
-                #     f"<h3 style='text-align: center; color: #4682B4;'>Site {site}</h3>",
-                #     unsafe_allow_html=True,
-                # )
                 sac.divider(
                     label=f"{site}",
                     icon="graph-up",
@@ -286,15 +280,6 @@ def main():
                     color="indigo",
                 )
 
-                # col1, col2 = st.columns(2)
-
-                # with col1:
-                # st.markdown(
-                #     f"<h4 icon: graph-up; style='text-align: left; color: #C71585; '>PRB Utilization {site}</h4>",
-                #     unsafe_allow_html=True,
-                # )
-
-                # with st.columns(1):
                 st.markdown(
                     """ <style> .font {
                     font-size:20px ; text-align: left; font-family: 'Ericsson Hilda Light'; color: #393955;}
@@ -325,7 +310,6 @@ def main():
                         )
                         st.plotly_chart(fig, use_container_width=True)
 
-                # with st.columns(1):
                 st.markdown(
                     """ <style> .font {
                     font-size:20px ; text-align: left; font-family: 'Ericsson Hilda Light'; color: #393955;}
@@ -355,13 +339,12 @@ def main():
                         st.plotly_chart(fig, use_container_width=True)
 
                 if df is None:
-                    # else:
                     sac.result(
                         label="Alert",
-                        description="Data not found for the selected site and date range. Please try again.",
+                        description="Data not stored in the database. Please update the data.",
                     )
                 else:
-                    st.error("No Avaialble Data in the Database")
+                    st.error("Data not stored in the database. Please update the data.")
 
 
 if __name__ == "__main__":
