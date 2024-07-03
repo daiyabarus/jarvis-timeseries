@@ -2554,6 +2554,20 @@ files = [
 streamlit = ">=0.63"
 
 [[package]]
+name = "streamlit-dynamic-filters"
+version = "0.1.6"
+description = "Dynamic multiselect filters for Streamlit"
+optional = false
+python-versions = "*"
+files = [
+    {file = "streamlit_dynamic_filters-0.1.6-py3-none-any.whl", hash = "sha256:882f213dd3b846704a894c8e31271f0401775334f979a9e4e492a85035179d56"},
+    {file = "streamlit_dynamic_filters-0.1.6.tar.gz", hash = "sha256:3d4f53007bf281c846477a2d9f202e61bb97c19c5c43d3dadab75019133c28f2"},
+]
+
+[package.dependencies]
+streamlit = "*"
+
+[[package]]
 name = "streamlit-embedcode"
 version = "0.1.2"
 description = "Streamlit component for embedded code snippets"
@@ -2914,4 +2928,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.12"
-content-hash = "8382d9753503680ca25aa680a9f3251851af44e046c6e3164bb5f3fac59bed55"
+content-hash = "eb96b82e2e65a03bd9a15b195f6a07c29ddf1c354e502c2f6a649e22ffe16fe1"

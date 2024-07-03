@@ -1,3 +1,4 @@
+# colors.py
 from typing import ClassVar
 
 
@@ -57,4 +58,4 @@ class ColorPalette:
 
     @classmethod
     def get_color(cls, index: int) -> str:
-        return cls.COLORS[index % len(cls.COLORS)]
+        return cls.color_codes[index % len(cls.color_codes)]
