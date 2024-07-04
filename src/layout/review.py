@@ -1,4 +1,5 @@
 import os
+from datetime import timedelta
 
 import altair as alt
 import pandas as pd
@@ -14,7 +15,8 @@ from styles import styling
 # MARK: - Config OK
 # FIXME: - Need run query if not select neid - DONE
 # TODO: - Need to append target to ltedaily data - create another query chart to display target data with datums DONE
-# TODO: - Need create chart area for payload parameter
+# TODO: - Need create chart area for payload parameter - DONE
+# TODO: - Need to create chart PRB and Active User
 
 
 class Config:
@@ -150,6 +152,27 @@ class QueryManager:
 
         return self.fetch_data(query, params)
 
+    def get_ltedaily_payload(self, selected_sites, start_date, end_date):
+        like_conditions = " OR ".join(
+            [f'"SITEID" LIKE :site_{i}' for i in range(len(selected_sites))]
+        )
+        query = text(
+            f"""
+            SELECT
+            "DATE_ID",
+            "SITEID",
+            "NEID",
+            "Payload_Total(Gb)"
+            FROM ltedaily
+            WHERE ({like_conditions})
+            AND "DATE_ID" BETWEEN :start_date AND :end_date
+            """
+        )
+        params = {f"site_{i}": f"%{site}%" for i, site in enumerate(selected_sites)}
+        params.update({"start_date": start_date, "end_date": end_date})
+
+        return self.fetch_data(query, params=params)
+
     def get_ltehourly_data(self, selected_sites, start_date, end_date):
         like_conditions = " OR ".join(
             [f'"EUtranCellFDD" LIKE :site_{i}' for i in range(len(selected_sites))]
@@ -184,15 +207,16 @@ class QueryManager:
             query, {"city": city, "mc_class": mc_class, "band": band}
         )
 
-    def get_ltemdt_data(self, enodebid, ci):
+    # def get_ltemdt_data(self, enodebid, ci):
+    def get_ltemdt_data(self, enodebid):
         query = text(
             """
         SELECT *
         FROM ltemdt
-        WHERE enodebid = :enodebid AND ci = :ci
+        WHERE enodebid = :enodebid
         """
         )
-        return self.fetch_data(query, {"enodebid": enodebid, "ci": ci})
+        return self.fetch_data(query, {"enodebid": enodebid})
 
     def get_ltetastate_data(self, enodebid, ci):
         query = text(
@@ -204,10 +228,14 @@ class QueryManager:
         )
         return self.fetch_data(query, {"enodebid": enodebid, "ci": ci})
 
-    def get_vswr_data(self, selected_sites, start_date, end_date):
+    def get_vswr_data(self, selected_sites, end_date):
         like_conditions = " OR ".join(
             [f'"NE_NAME" LIKE :site_{i}' for i in range(len(selected_sites))]
         )
+
+        # Calculate start_date as one day before end_date
+        start_date = end_date - timedelta(days=2)
+
         query = text(
             f"""
         SELECT
@@ -262,6 +290,7 @@ class ChartGenerator:
         last_char = cell[-1].upper()
         return sector_mapping.get(last_char, 0)
 
+    # TAG: - Create Charts  Line
     def create_charts(
         self, df, param, site, x_param, y_param, sector_param, yaxis_range=None
     ):
@@ -305,7 +334,7 @@ class ChartGenerator:
                         ),
                     ),
                 )
-                .properties(title=f"Sector {sector}", width=475, height=200)
+                .properties(title=f"Sector {sector}", width=590, height=150)
             )
             charts.append(sector_chart)
 
@@ -315,23 +344,30 @@ class ChartGenerator:
                 fontSize=18,
                 anchor="middle",
                 font="Ericsson Hilda Light",
-                color="#800000",
+                color="#717577",
             )
             .configure_legend(
-                orient="right",
-                titleFontSize=11,
-                labelFontSize=11,
-                titleColor="#800000",
-                titlePadding=5,
+                orient="bottom",
+                titleFontSize=16,
+                labelFontSize=14,
+                titleColor="#5F6264",
+                titlePadding=10,
+                columns=6,
+                titleAnchor="start",
+                direction="horizontal",
+                gradientLength=400,
+                labelLimit=0,
             )
         )
-
-        container = st.container(border=True)
-        with container:
+        col1 = st.columns(1)
+        con1 = st.container(border=True)
+        # container = st.container(border=True)
+        with con1:
             st.altair_chart(combined_chart, use_container_width=True)
 
+    # TAG: - Create Charts Line with Datums
     def create_charts_datums(
-        self, df, param, site, x_param, y_param, sector_param, y2_avg, yaxis_range
+        self, df, param, site, x_param, y_param, sector_param, y2_avg, yaxis_range=None
     ):
         sectors = sorted(df[sector_param].apply(self.determine_sector).unique())
 
@@ -345,7 +381,12 @@ class ChartGenerator:
 
         charts = []
         for sector in sectors:
+
             sector_df = df[df[sector_param].apply(self.determine_sector) == sector]
+            if yaxis_range:
+                y_scale = alt.Scale(domain=yaxis_range)
+            else:
+                y_scale = alt.Scale()
 
             sector_chart = (
                 alt.Chart(sector_df)
@@ -355,7 +396,8 @@ class ChartGenerator:
                     y=alt.Y(
                         y_param,
                         type="quantitative",
-                        scale=alt.Scale(domain=yaxis_range),
+                        # scale=alt.Scale(domain=yaxis_range),
+                        scale=y_scale,
                         axis=alt.Axis(title=y_param),
                     ),
                     color=alt.Color(
@@ -366,7 +408,7 @@ class ChartGenerator:
                         ),
                     ),
                 )
-                .properties(title=f"Sector {sector}", width=475, height=200)
+                .properties(title=f"Sector {sector}", width=600, height=150)
             )
 
             # Add y2_avg line rule to the chart
@@ -386,20 +428,323 @@ class ChartGenerator:
                 fontSize=18,
                 anchor="middle",
                 font="Ericsson Hilda Light",
-                color="#800000",
+                color="#717577",
             )
             .configure_legend(
-                orient="right",
-                titleFontSize=11,
-                labelFontSize=11,
-                titleColor="#800000",
-                titlePadding=5,
+                orient="bottom",
+                titleFontSize=16,
+                labelFontSize=14,
+                titleColor="#5F6264",
+                titlePadding=10,
+                columns=6,
+                titleAnchor="start",
+                direction="horizontal",
+                gradientLength=400,
+                labelLimit=0,
+            )
+        )
+        container = st.container(border=True)
+        with container:
+            st.altair_chart(combined_chart, use_container_width=True)
+
+    # TAG: - Create Charts Stacked Area
+    def create_charts_area(
+        self, df, param, site, x_param, y_param, sector_param, yaxis_range=None
+    ):
+        sectors = sorted(df[sector_param].apply(self.determine_sector).unique())
+
+        color_mapping = {
+            cell: color
+            for cell, color in zip(
+                df[sector_param].unique(),
+                self.get_colors(len(df[sector_param].unique())),
+            )
+        }
+
+        charts = []
+        for sector in sectors:
+            sector_df = df[df[sector_param].apply(self.determine_sector) == sector]
+
+            # Determine y-axis range
+            if yaxis_range:
+                y_scale = alt.Scale(domain=yaxis_range)
+            else:
+                y_scale = alt.Scale()
+
+            sector_chart = (
+                alt.Chart(sector_df)
+                .mark_area()
+                .encode(
+                    x=alt.X(x_param, type="temporal", axis=alt.Axis(title=None)),
+                    y=alt.Y(
+                        y_param,
+                        type="quantitative",
+                        scale=y_scale,
+                        axis=alt.Axis(title=y_param),
+                        stack="zero",
+                    ),
+                    color=alt.Color(
+                        sector_param,
+                        scale=alt.Scale(
+                            domain=list(color_mapping.keys()),
+                            range=list(color_mapping.values()),
+                        ),
+                    ),
+                )
+                .properties(title=f"Sector {sector}", width=600, height=150)
+            )
+            charts.append(sector_chart)
+
+        combined_chart = (
+            alt.hconcat(*charts, autosize="fit")
+            .configure_title(
+                fontSize=18,
+                anchor="middle",
+                font="Ericsson Hilda Light",
+                color="#717577",
+            )
+            .configure_legend(
+                orient="bottom",
+                titleFontSize=16,
+                labelFontSize=14,
+                titleColor="#5F6264",
+                titlePadding=10,
+                columns=6,
+                titleAnchor="start",
+                direction="horizontal",
+                gradientLength=400,
+                labelLimit=0,
             )
         )
 
         container = st.container(border=True)
         with container:
             st.altair_chart(combined_chart, use_container_width=True)
+
+    # TAG: - Create Charts based on Frequency
+    def create_charts_neid(
+        self, df, param, site, x_param, y_param, neid, yaxis_range=None
+    ):
+        # Group by x_param and sum y_param values for each NEID
+        grouped_df = df.groupby([x_param, neid])[y_param].sum().reset_index()
+
+        color_mapping = {
+            cell: color
+            for cell, color in zip(
+                grouped_df[neid].unique(),
+                self.get_colors(len(grouped_df[neid].unique())),
+            )
+        }
+
+        # Determine y-axis range
+        if yaxis_range:
+            y_scale = alt.Scale(domain=yaxis_range)
+        else:
+            y_scale = alt.Scale()
+
+        chart = (
+            alt.Chart(grouped_df)
+            .mark_area()
+            .encode(
+                x=alt.X(x_param, type="temporal", axis=alt.Axis(title=None)),
+                y=alt.Y(
+                    y_param,
+                    type="quantitative",
+                    scale=y_scale,
+                    axis=alt.Axis(title=""),
+                    stack="zero",
+                ),
+                color=alt.Color(
+                    neid,
+                    scale=alt.Scale(
+                        domain=list(color_mapping.keys()),
+                        range=list(color_mapping.values()),
+                    ),
+                ),
+            )
+            .properties(title="Payload Gbps", width=600, height=350)
+            .configure_title(
+                fontSize=18,
+                anchor="middle",
+                font="Ericsson Hilda Light",
+                color="#717577",
+            )
+            .configure_legend(
+                orient="bottom",
+                titleFontSize=16,
+                labelFontSize=14,
+                titleColor="#5F6264",
+                titlePadding=10,
+                columns=6,
+                titleAnchor="start",
+                direction="horizontal",
+                gradientLength=400,
+                labelLimit=0,
+            )
+        )
+        st.altair_chart(chart, use_container_width=True)
+
+    # TAG: - Create Charts hourly
+    def create_charts_hourly(
+        self, df, param, site, x_param, y_param, sector_param, yaxis_range=None
+    ):
+        sectors = sorted(df[sector_param].apply(self.determine_sector).unique())
+        # title = self.get_header(df[sector_param].unique(), param, site)
+
+        color_mapping = {
+            cell: color
+            for cell, color in zip(
+                df[sector_param].unique(),
+                self.get_colors(len(df[sector_param].unique())),
+            )
+        }
+
+        charts = []
+        for sector in sectors:
+            sector_df = df[df[sector_param].apply(self.determine_sector) == sector]
+
+            # Determine y-axis range
+            if yaxis_range:
+                y_scale = alt.Scale(domain=yaxis_range)
+            else:
+                y_scale = alt.Scale()
+
+            sector_chart = (
+                alt.Chart(sector_df)
+                .mark_line()
+                .encode(
+                    x=alt.X(x_param, type="temporal", axis=alt.Axis(title=None)),
+                    y=alt.Y(
+                        y_param,
+                        type="quantitative",
+                        scale=y_scale,
+                        axis=alt.Axis(title=y_param),
+                    ),
+                    color=alt.Color(
+                        sector_param,
+                        scale=alt.Scale(
+                            domain=list(color_mapping.keys()),
+                            range=list(color_mapping.values()),
+                        ),
+                    ),
+                )
+                .properties(title=f"Sector {sector}", width=600, height=150)
+            )
+            charts.append(sector_chart)
+
+        combined_chart = (
+            alt.hconcat(*charts, autosize="fit")
+            .configure_title(
+                fontSize=18,
+                anchor="middle",
+                font="Ericsson Hilda Light",
+                color="#717577",
+            )
+            .configure_legend(
+                orient="bottom",
+                titleFontSize=16,
+                labelFontSize=14,
+                titleColor="#5F6264",
+                titlePadding=10,
+                columns=6,
+                titleAnchor="start",
+                direction="horizontal",
+                gradientLength=400,
+                labelLimit=0,
+            )
+        )
+
+        container = st.container(border=True)
+        with container:
+            st.altair_chart(combined_chart, use_container_width=True)
+
+    # TAG: - Create Charts for VSWR
+    def create_charts_vswr(self, df, x1_param, x2_param, y_param, nename):
+        # Define color mapping
+        color_mapping = {
+            cell: color
+            for cell, color in zip(
+                df[x2_param].unique(),
+                self.get_colors(len(df[x2_param].unique())),
+            )
+        }
+
+        # Create baseline rule
+        baseline_value = 1.3
+        baseline = (
+            alt.Chart(pd.DataFrame({"baseline": [baseline_value]}))
+            .mark_rule(color="red", strokeDash=[8, 4], strokeWidth=5)
+            .encode(y="baseline:Q")
+        )
+
+        # Create main chart
+        bars = (
+            alt.Chart(df)
+            .mark_bar(size=10)  # Adjust bar width
+            .encode(
+                x=alt.X(
+                    x1_param,
+                    type="ordinal",
+                    axis=alt.Axis(title="", labels=False),  # Hide x-axis labels
+                    scale=alt.Scale(type="point", padding=0.1),
+                ),  # Adjust padding between bars
+                y=alt.Y(
+                    y_param,
+                    type="quantitative",
+                    axis=alt.Axis(title=y_param),
+                    stack="zero",
+                ),
+                color=alt.Color(
+                    x2_param,
+                    scale=alt.Scale(
+                        domain=list(color_mapping.keys()),
+                        range=list(color_mapping.values()),
+                    ),
+                ),
+                tooltip=[x1_param, x2_param, y_param],
+            )
+        )
+
+        # Create highlight chart for values above the baseline
+        highlight = bars.mark_bar(color="#e45755").transform_filter(
+            alt.datum[y_param] > baseline_value
+        )
+
+        # Combine charts and add facet for NE_NAME
+        chart = (
+            (bars + highlight + baseline)
+            .facet(
+                column=alt.Facet(nename, type="nominal", title=""),
+                spacing=0,  # Remove spacing between facets
+            )
+            .properties(
+                title="",
+            )
+            .resolve_scale(x="shared")  # Share x-axis scale across facets
+            .configure_title(
+                fontSize=18,
+                anchor="middle",
+                font="Ericsson Hilda Light",
+                color="#717577",
+            )
+            .configure_legend(
+                orient="bottom",
+                titleFontSize=16,
+                labelFontSize=14,
+                titleColor="#5F6264",
+                titlePadding=10,
+                columns=6,
+                titleAnchor="start",
+                direction="horizontal",
+                gradientLength=400,
+                labelLimit=0,
+            )
+            .configure_view(strokeWidth=0)
+        )
+        col1, _ = st.columns([1.5, 1])
+        con1 = col1.container(border=True)
+        with con1:
+            st.altair_chart(chart, use_container_width=True)
 
 
 class App:
@@ -487,9 +832,10 @@ class App:
                         combined_target_data.append(target_data)
 
                         # Get and append ltemdt data
-                        ltemdt_data = self.query_manager.get_ltemdt_data(
-                            row["eNBId"], row["cellId"]
-                        )
+                        # ltemdt_data = self.query_manager.get_ltemdt_data(
+                        #     row["eNBId"], row["cellId"]
+                        # )
+                        ltemdt_data = self.query_manager.get_ltemdt_data(row["eNBId"])
                         ltemdt_data["EutranCell"] = row["Cell_Name"]
                         combined_ltemdt_data.append(ltemdt_data)
 
@@ -532,9 +878,9 @@ class App:
                     self.dataframe_manager.add_dataframe(
                         "combined_ltemdt_data", combined_ltemdt_df
                     )
-                    # self.dataframe_manager.display_dataframe(
-                    #     "combined_ltemdt_data", "Combined LTE MDT Data"
-                    # )
+                    self.dataframe_manager.display_dataframe(
+                        "combined_ltemdt_data", "Combined LTE MDT Data"
+                    )
 
                 # Combine ltetastate data and display
                 if combined_ltetastate_data:
@@ -557,7 +903,7 @@ class App:
                         "combined_ltedaily_data", combined_ltedaily_df
                     )
                     # self.dataframe_manager.display_dataframe(
-                    #     "combined_ltedaily_data", "Combined LTE Daily Data"
+                    #     "combined_ltedaily_data", "LTE Daily Data"
                     # )
 
                     # Combine target data with ltedaily data
@@ -572,7 +918,7 @@ class App:
                     )
                     # self.dataframe_manager.display_dataframe(
                     #     "combined_target_ltedaily_data",
-                    #     "Combined Target and LTE Daily Data",
+                    #     "LTE Daily Data & Datum",
                     # )
 
                     yaxis_ranges = [
@@ -584,9 +930,10 @@ class App:
                         [-120, -105],
                     ]
 
+                    # TAG: - Availability
                     st.markdown(
                         *styling(
-                            f"Availability Site {siteid}",
+                            f"📈 Availability Site {siteid}",
                             font_size=24,
                             text_align="left",
                             tag="h6",
@@ -602,9 +949,10 @@ class App:
                         yaxis_range=yaxis_ranges[0],
                     )
 
+                    # TAG: - RRC Setup Success Rate
                     st.markdown(
                         *styling(
-                            f"RRC SR Site {siteid}",
+                            f"📈 RRC SR Site {siteid}",
                             font_size=24,
                             text_align="left",
                             tag="h6",
@@ -622,9 +970,10 @@ class App:
                         yaxis_range=yaxis_ranges[0],
                     )
 
+                    # TAG: - ERAB SR
                     st.markdown(
                         *styling(
-                            f"ERAB SR Site {siteid}",
+                            f"📈 ERAB SR Site {siteid}",
                             font_size=24,
                             text_align="left",
                             tag="h6",
@@ -642,9 +991,10 @@ class App:
                         yaxis_range=yaxis_ranges[0],
                     )
 
+                    # TAG: - SSSR
                     st.markdown(
                         *styling(
-                            f"SSSR Site {siteid}",
+                            f"📈 SSSR Site {siteid}",
                             font_size=24,
                             text_align="left",
                             tag="h6",
@@ -662,9 +1012,10 @@ class App:
                         yaxis_range=yaxis_ranges[0],
                     )
 
+                    # TAG: - CSSR
                     st.markdown(
                         *styling(
-                            f"SAR Site {siteid}",
+                            f"📈 SAR Site {siteid}",
                             font_size=24,
                             text_align="left",
                             tag="h6",
@@ -679,12 +1030,14 @@ class App:
                         y_param="SAR",
                         sector_param="EutranCell",
                         y2_avg="Service Drop Rate",
-                        yaxis_range=yaxis_ranges[4],
+                        # yaxis_range=yaxis_ranges[4],
+                        yaxis_range=None,
                     )
 
+                    # TAG: - CQI Non HOM
                     st.markdown(
                         *styling(
-                            f"CQI NON HOM Site {siteid}",
+                            f"📈 CQI NON HOM Site {siteid}",
                             font_size=24,
                             text_align="left",
                             tag="h6",
@@ -702,9 +1055,10 @@ class App:
                         yaxis_range=yaxis_ranges[4],
                     )
 
+                    # TAG: - Spectral Efficiency
                     st.markdown(
                         *styling(
-                            f"SE Site {siteid}",
+                            f"📈 SE Site {siteid}",
                             font_size=24,
                             text_align="left",
                             tag="h6",
@@ -719,12 +1073,13 @@ class App:
                         y_param="SE_DAILY",
                         sector_param="EutranCell",
                         y2_avg="SE",
-                        yaxis_range=yaxis_ranges[3],
+                        yaxis_range=None,
                     )
 
+                    # TAG: - Intra HO SR
                     st.markdown(
                         *styling(
-                            f"Intra HO SR {siteid}",
+                            f"📈 Intra HO SR {siteid}",
                             font_size=24,
                             text_align="left",
                             tag="h6",
@@ -742,9 +1097,10 @@ class App:
                         yaxis_range=yaxis_ranges[0],
                     )
 
+                    # TAG: - Inter HO SR
                     st.markdown(
                         *styling(
-                            f"Inter HO SR {siteid}",
+                            f"📈 Inter HO SR {siteid}",
                             font_size=24,
                             text_align="left",
                             tag="h6",
@@ -762,9 +1118,10 @@ class App:
                         yaxis_range=yaxis_ranges[0],
                     )
 
+                    # TAG: - UL RSSI
                     st.markdown(
                         *styling(
-                            f"UL RSSI {siteid}",
+                            f"📈 UL RSSI {siteid}",
                             font_size=24,
                             text_align="left",
                             tag="h6",
@@ -779,12 +1136,13 @@ class App:
                         y_param="UL_INT_PUSCH_y",
                         sector_param="EutranCell",
                         y2_avg="UL_INT_PUSCH_x",
-                        yaxis_range=yaxis_ranges[5],
+                        yaxis_range=None,
                     )
 
+                    # TAG: - Throughput Mpbs
                     st.markdown(
                         *styling(
-                            f"Throughput Mpbs {siteid}",
+                            f"📈 Throughput Mbps {siteid}",
                             font_size=24,
                             text_align="left",
                             tag="h6",
@@ -798,26 +1156,158 @@ class App:
                         x_param="DATE_ID",
                         y_param="CellDownlinkAverageThroughput",
                         sector_param="EutranCell",
-                        # y2_avg="UL_INT_PUSCH_x",
                         yaxis_range=None,
                     )
 
-                # Fetch LTE hourly data
+                    # TAG: - Payload Sector
+                    st.markdown(
+                        *styling(
+                            f"📈 Payload Sectoral  {siteid}",
+                            font_size=24,
+                            text_align="left",
+                            tag="h6",
+                        )
+                    )
+
+                    self.chart_generator.create_charts_area(
+                        df=combined_target_ltedaily_df,
+                        param="Payload Sectoral",
+                        site="Combined Sites",
+                        x_param="DATE_ID",
+                        y_param="Payload_Total(Gb)",
+                        sector_param="EutranCell",
+                        yaxis_range=None,
+                    )
+
+                payload_data = self.query_manager.get_ltedaily_payload(
+                    selected_sites, start_date, end_date
+                )
+                self.dataframe_manager.add_dataframe("payload_data", payload_data)
+
+                col1, col2 = st.columns([1, 1])
+                with col1:
+                    st.markdown(
+                        *styling(
+                            f"📈 Payload By NEID  {siteid}",
+                            font_size=24,
+                            text_align="left",
+                            tag="h6",
+                        )
+                    )
+
+                with col2:
+                    st.markdown(
+                        *styling(
+                            f"📈 Payload By SITE  {siteid}",
+                            font_size=24,
+                            text_align="left",
+                            tag="h6",
+                        )
+                    )
+                # TAG: - Payload Neid
+                col1, col2 = st.columns([1, 1])
+                con1 = col1.container(border=True)
+                con2 = col2.container(border=True)
+                with con1:
+                    self.chart_generator.create_charts_neid(
+                        df=payload_data,
+                        param="Payload Frequency",
+                        site="Sites",
+                        x_param="DATE_ID",
+                        y_param="Payload_Total(Gb)",
+                        neid="NEID",
+                        yaxis_range=None,
+                    )
+
+                with con2:
+                    self.chart_generator.create_charts_neid(
+                        df=payload_data,
+                        param="Payload By Site",
+                        site="Sites",
+                        x_param="DATE_ID",
+                        y_param="Payload_Total(Gb)",
+                        neid="SITEID",
+                        yaxis_range=None,
+                    )
+
                 ltehourly_data = self.query_manager.get_ltehourly_data(
                     selected_sites, start_date, end_date
                 )
+
+                ltehourly_data["datetime"] = pd.to_datetime(
+                    ltehourly_data["DATE_ID"].astype(str)
+                    + " "
+                    + ltehourly_data["hour_id"].astype(str).str.zfill(2),
+                    format="%Y-%m-%d %H",
+                )
+
                 self.dataframe_manager.add_dataframe("ltehourly_data", ltehourly_data)
                 # self.dataframe_manager.display_dataframe(
                 #     "ltehourly_data", "LTE Hourly Data"
                 # )
+                # TAG: - PRB & Active User
 
-                # Fetch VSWR data
-                vswr_data = self.query_manager.get_vswr_data(
-                    selected_sites, start_date, end_date
+                st.markdown(
+                    *styling(
+                        f"📈 PRB Utilization {siteid}",
+                        font_size=24,
+                        text_align="left",
+                        tag="h6",
+                    )
                 )
+                self.chart_generator.create_charts(
+                    df=ltehourly_data,
+                    param="PRB Utilization",
+                    site="Combined Sites",
+                    # x_param="DATE_ID",
+                    x_param="datetime",
+                    y_param="DL_Resource_Block_Utilizing_Rate",
+                    sector_param="EUtranCellFDD",
+                    yaxis_range=None,
+                )
+
+                st.markdown(
+                    *styling(
+                        f"📈 Active User {siteid}",
+                        font_size=24,
+                        text_align="left",
+                        tag="h6",
+                    )
+                )
+                self.chart_generator.create_charts(
+                    df=ltehourly_data,
+                    param="Active User",
+                    site="Combined Sites",
+                    # x_param="DATE_ID",
+                    x_param="datetime",
+                    y_param="Active User",
+                    sector_param="EUtranCellFDD",
+                    yaxis_range=None,
+                )
+                # Fetch VSWR data
+                vswr_data = self.query_manager.get_vswr_data(selected_sites, end_date)
                 self.dataframe_manager.add_dataframe("vswr_data", vswr_data)
                 # self.dataframe_manager.display_dataframe("vswr_data", "VSWR Data")
+                # TAG: - VSWR
 
+                st.markdown(
+                    *styling(
+                        f"📈 VSWR {siteid}",
+                        font_size=24,
+                        text_align="left",
+                        tag="h6",
+                    )
+                )
+                # def create_charts_vswr(self, df, x1_param, x2_param, y_param, nename):
+                self.chart_generator.create_charts_vswr(
+                    df=vswr_data,
+                    # param="VSWR",
+                    # site="Combined Sites",
+                    x1_param="DATE_ID",
+                    x2_param="RRU",
+                    y_param="VSWR",
+                    nename="RRU",
+                )
                 # Close session
                 session.close()
             else:
