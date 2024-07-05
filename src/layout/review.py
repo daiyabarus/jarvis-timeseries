@@ -13,10 +13,11 @@ from streamlit_extras.mandatory_date_range import date_range_picker
 from styles import styling
 
 # MARK: - Config OK
-# FIXME: - Need run query if not select neid - DONE
+# BUG: - Need run query if not select neid - DONE
 # TODO: - Need to append target to ltedaily data - create another query chart to display target data with datums DONE
 # TODO: - Need create chart area for payload parameter - DONE
-# TODO: - Need to create chart PRB and Active User
+# TODO: - Need to create chart PRB and Active User - DONE
+# TODO:  CQI Overlay | Geo Plotting
 
 
 class Config:
@@ -80,7 +81,7 @@ class StreamlitInterface:
     def select_date_range(self):
         if "date_range" not in st.session_state:
             st.session_state["date_range"] = (
-                pd.Timestamp.today() - pd.Timedelta(days=8),
+                pd.Timestamp.today() - pd.Timedelta(days=30),
                 pd.Timestamp.today(),
             )
 
@@ -162,7 +163,9 @@ class QueryManager:
             "DATE_ID",
             "SITEID",
             "NEID",
-            "Payload_Total(Gb)"
+            "EutranCell",
+            "Payload_Total(Gb)",
+            "CQI Bh"
             FROM ltedaily
             WHERE ({like_conditions})
             AND "DATE_ID" BETWEEN :start_date AND :end_date
@@ -173,10 +176,11 @@ class QueryManager:
 
         return self.fetch_data(query, params=params)
 
-    def get_ltehourly_data(self, selected_sites, start_date, end_date):
+    def get_ltehourly_data(self, selected_sites, end_date):
         like_conditions = " OR ".join(
             [f'"EUtranCellFDD" LIKE :site_{i}' for i in range(len(selected_sites))]
         )
+        start_date = end_date - timedelta(days=15)
         query = text(
             f"""
         SELECT
@@ -339,27 +343,33 @@ class ChartGenerator:
             charts.append(sector_chart)
 
         combined_chart = (
-            alt.hconcat(*charts, autosize="fit")
-            .configure_title(
+            alt.hconcat(*charts, autosize="fit").configure_title(
                 fontSize=18,
                 anchor="middle",
-                font="Ericsson Hilda Light",
+                font="Vodafone",
                 color="#717577",
             )
+            # .configure(background="#F5F5F5")
             .configure_legend(
                 orient="bottom",
                 titleFontSize=16,
                 labelFontSize=14,
+                labelFont="Vodafone",
                 titleColor="#5F6264",
+                padding=10,
                 titlePadding=10,
+                cornerRadius=10,
+                strokeColor="#9A9A9A",
                 columns=6,
                 titleAnchor="start",
-                direction="horizontal",
+                direction="vertical",
                 gradientLength=400,
                 labelLimit=0,
+                symbolSize=30,
+                symbolType="square",
             )
         )
-        col1 = st.columns(1)
+
         con1 = st.container(border=True)
         # container = st.container(border=True)
         with con1:
@@ -427,20 +437,26 @@ class ChartGenerator:
             .configure_title(
                 fontSize=18,
                 anchor="middle",
-                font="Ericsson Hilda Light",
+                font="Vodafone",
                 color="#717577",
             )
             .configure_legend(
                 orient="bottom",
                 titleFontSize=16,
                 labelFontSize=14,
+                labelFont="Vodafone",
                 titleColor="#5F6264",
+                padding=10,
                 titlePadding=10,
+                cornerRadius=10,
+                strokeColor="#9A9A9A",
                 columns=6,
                 titleAnchor="start",
-                direction="horizontal",
+                direction="vertical",
                 gradientLength=400,
                 labelLimit=0,
+                symbolSize=30,
+                symbolType="square",
             )
         )
         container = st.container(border=True)
@@ -500,20 +516,26 @@ class ChartGenerator:
             .configure_title(
                 fontSize=18,
                 anchor="middle",
-                font="Ericsson Hilda Light",
+                font="Vodafone",
                 color="#717577",
             )
             .configure_legend(
                 orient="bottom",
                 titleFontSize=16,
                 labelFontSize=14,
+                labelFont="Vodafone",
                 titleColor="#5F6264",
+                padding=10,
                 titlePadding=10,
+                cornerRadius=10,
+                strokeColor="#9A9A9A",
                 columns=6,
                 titleAnchor="start",
-                direction="horizontal",
+                direction="vertical",
                 gradientLength=400,
                 labelLimit=0,
+                symbolSize=30,
+                symbolType="square",
             )
         )
 
@@ -566,20 +588,26 @@ class ChartGenerator:
             .configure_title(
                 fontSize=18,
                 anchor="middle",
-                font="Ericsson Hilda Light",
+                font="Vodafone",
                 color="#717577",
             )
             .configure_legend(
                 orient="bottom",
                 titleFontSize=16,
                 labelFontSize=14,
+                labelFont="Vodafone",
                 titleColor="#5F6264",
+                padding=10,
                 titlePadding=10,
+                cornerRadius=10,
+                strokeColor="#9A9A9A",
                 columns=6,
                 titleAnchor="start",
-                direction="horizontal",
+                direction="vertical",
                 gradientLength=400,
                 labelLimit=0,
+                symbolSize=30,
+                symbolType="square",
             )
         )
         st.altair_chart(chart, use_container_width=True)
@@ -611,7 +639,7 @@ class ChartGenerator:
 
             sector_chart = (
                 alt.Chart(sector_df)
-                .mark_line()
+                .mark_line(strokeWidth=10)
                 .encode(
                     x=alt.X(x_param, type="temporal", axis=alt.Axis(title=None)),
                     y=alt.Y(
@@ -637,20 +665,26 @@ class ChartGenerator:
             .configure_title(
                 fontSize=18,
                 anchor="middle",
-                font="Ericsson Hilda Light",
+                font="Vodafone",
                 color="#717577",
             )
             .configure_legend(
                 orient="bottom",
                 titleFontSize=16,
                 labelFontSize=14,
+                labelFont="Vodafone",
                 titleColor="#5F6264",
+                padding=10,
                 titlePadding=10,
+                cornerRadius=10,
+                strokeColor="#9A9A9A",
                 columns=6,
                 titleAnchor="start",
-                direction="horizontal",
+                direction="vertical",
                 gradientLength=400,
                 labelLimit=0,
+                symbolSize=30,
+                symbolType="square",
             )
         )
 
@@ -724,20 +758,26 @@ class ChartGenerator:
             .configure_title(
                 fontSize=18,
                 anchor="middle",
-                font="Ericsson Hilda Light",
+                font="Vodafone",
                 color="#717577",
             )
             .configure_legend(
                 orient="bottom",
                 titleFontSize=16,
                 labelFontSize=14,
+                labelFont="Vodafone",
                 titleColor="#5F6264",
+                padding=10,
                 titlePadding=10,
+                cornerRadius=10,
+                strokeColor="#9A9A9A",
                 columns=6,
                 titleAnchor="start",
-                direction="horizontal",
+                direction="vertical",
                 gradientLength=400,
                 labelLimit=0,
+                symbolSize=30,
+                symbolType="square",
             )
             .configure_view(strokeWidth=0)
         )
@@ -1184,6 +1224,25 @@ class App:
                 )
                 self.dataframe_manager.add_dataframe("payload_data", payload_data)
 
+                st.markdown(
+                    *styling(
+                        f"📈 CQI Overlay  {siteid}",
+                        font_size=24,
+                        text_align="left",
+                        tag="h6",
+                    )
+                )
+
+                self.chart_generator.create_charts(
+                    df=payload_data,
+                    param="CQI Overlay",
+                    site="Combined Sites",
+                    x_param="DATE_ID",
+                    y_param="CQI Bh",
+                    sector_param="EutranCell",
+                    yaxis_range=None,
+                )
+
                 col1, col2 = st.columns([1, 1])
                 with col1:
                     st.markdown(
@@ -1231,7 +1290,7 @@ class App:
                     )
 
                 ltehourly_data = self.query_manager.get_ltehourly_data(
-                    selected_sites, start_date, end_date
+                    selected_sites, end_date
                 )
 
                 ltehourly_data["datetime"] = pd.to_datetime(
