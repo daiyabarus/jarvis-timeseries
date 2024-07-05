@@ -10,6 +10,7 @@ from omegaconf import DictConfig, OmegaConf
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from streamlit_extras.mandatory_date_range import date_range_picker
+from streamlit_extras.stylable_container import stylable_container
 from styles import styling
 
 # MARK: - Config OK
@@ -17,7 +18,7 @@ from styles import styling
 # TODO: - Need to append target to ltedaily data - create another query chart to display target data with datums DONE
 # TODO: - Need create chart area for payload parameter - DONE
 # TODO: - Need to create chart PRB and Active User - DONE
-# TODO:  CQI Overlay | Geo Plotting
+# TODO:  CQI Overlay - DONE | Geo Plotting
 
 
 class Config:
@@ -81,8 +82,8 @@ class StreamlitInterface:
     def select_date_range(self):
         if "date_range" not in st.session_state:
             st.session_state["date_range"] = (
-                pd.Timestamp.today() - pd.Timedelta(days=30),
-                pd.Timestamp.today(),
+                pd.Timestamp.today() - pd.DateOffset(months=3),
+                pd.Timestamp.today() - pd.Timedelta(days=1),
             )
 
         date_range = date_range_picker(
@@ -238,7 +239,7 @@ class QueryManager:
         )
 
         # Calculate start_date as one day before end_date
-        start_date = end_date - timedelta(days=2)
+        start_date = end_date - timedelta(days=1)
 
         query = text(
             f"""
@@ -299,7 +300,6 @@ class ChartGenerator:
         self, df, param, site, x_param, y_param, sector_param, yaxis_range=None
     ):
         sectors = sorted(df[sector_param].apply(self.determine_sector).unique())
-        # title = self.get_header(df[sector_param].unique(), param, site)
 
         color_mapping = {
             cell: color
@@ -313,7 +313,6 @@ class ChartGenerator:
         for sector in sectors:
             sector_df = df[df[sector_param].apply(self.determine_sector) == sector]
 
-            # Determine y-axis range
             if yaxis_range:
                 y_scale = alt.Scale(domain=yaxis_range)
             else:
@@ -343,13 +342,13 @@ class ChartGenerator:
             charts.append(sector_chart)
 
         combined_chart = (
-            alt.hconcat(*charts, autosize="fit").configure_title(
+            alt.hconcat(*charts, autosize="fit", background="#F5F5F5")
+            .configure_title(
                 fontSize=18,
                 anchor="middle",
                 font="Vodafone",
                 color="#717577",
             )
-            # .configure(background="#F5F5F5")
             .configure_legend(
                 orient="bottom",
                 titleFontSize=16,
@@ -359,7 +358,7 @@ class ChartGenerator:
                 padding=10,
                 titlePadding=10,
                 cornerRadius=10,
-                strokeColor="#9A9A9A",
+                # strokeColor="#9A9A9A",
                 columns=6,
                 titleAnchor="start",
                 direction="vertical",
@@ -370,14 +369,33 @@ class ChartGenerator:
             )
         )
 
-        con1 = st.container(border=True)
-        # container = st.container(border=True)
-        with con1:
-            st.altair_chart(combined_chart, use_container_width=True)
+        with stylable_container(
+            key="container_with_border",
+            css_styles="""
+                {
+                    background-color: #F5F5F5;
+                    border: 2px solid rgba(49, 51, 63, 0.2);
+                    border-radius: 0.5rem;
+                    padding: calc(1em - 1px)
+                }
+                """,
+        ):
+            container = st.container()
+            with container:
+                st.altair_chart(combined_chart, use_container_width=True)
 
     # TAG: - Create Charts Line with Datums
     def create_charts_datums(
-        self, df, param, site, x_param, y_param, sector_param, y2_avg, yaxis_range=None
+        self,
+        df,
+        param,
+        site,
+        x_param,
+        y_param,
+        sector_param,
+        y2_avg,
+        yaxis_range=None,
+        yaxis_reverse=False,
     ):
         sectors = sorted(df[sector_param].apply(self.determine_sector).unique())
 
@@ -393,7 +411,10 @@ class ChartGenerator:
         for sector in sectors:
 
             sector_df = df[df[sector_param].apply(self.determine_sector) == sector]
-            if yaxis_range:
+
+            if yaxis_range and yaxis_reverse:
+                y_scale = alt.Scale(domain=yaxis_range, reverse=True)
+            elif yaxis_range:
                 y_scale = alt.Scale(domain=yaxis_range)
             else:
                 y_scale = alt.Scale()
@@ -433,7 +454,7 @@ class ChartGenerator:
             charts.append(sector_chart)
 
         combined_chart = (
-            alt.hconcat(*charts, autosize="fit")
+            alt.hconcat(*charts, autosize="fit", background="#F5F5F5")
             .configure_title(
                 fontSize=18,
                 anchor="middle",
@@ -449,7 +470,7 @@ class ChartGenerator:
                 padding=10,
                 titlePadding=10,
                 cornerRadius=10,
-                strokeColor="#9A9A9A",
+                # strokeColor="#9A9A9A",
                 columns=6,
                 titleAnchor="start",
                 direction="vertical",
@@ -459,9 +480,21 @@ class ChartGenerator:
                 symbolType="square",
             )
         )
-        container = st.container(border=True)
-        with container:
-            st.altair_chart(combined_chart, use_container_width=True)
+
+        with stylable_container(
+            key="container_with_border",
+            css_styles="""
+                {
+                    background-color: #F5F5F5;
+                    border: 2px solid rgba(49, 51, 63, 0.2);
+                    border-radius: 0.5rem;
+                    padding: calc(1em - 1px)
+                }
+                """,
+        ):
+            container = st.container()
+            with container:
+                st.altair_chart(combined_chart, use_container_width=True)
 
     # TAG: - Create Charts Stacked Area
     def create_charts_area(
@@ -512,7 +545,7 @@ class ChartGenerator:
             charts.append(sector_chart)
 
         combined_chart = (
-            alt.hconcat(*charts, autosize="fit")
+            alt.hconcat(*charts, autosize="fit", background="#F5F5F5")
             .configure_title(
                 fontSize=18,
                 anchor="middle",
@@ -528,7 +561,7 @@ class ChartGenerator:
                 padding=10,
                 titlePadding=10,
                 cornerRadius=10,
-                strokeColor="#9A9A9A",
+                # strokeColor="#9A9A9A",
                 columns=6,
                 titleAnchor="start",
                 direction="vertical",
@@ -539,11 +572,23 @@ class ChartGenerator:
             )
         )
 
-        container = st.container(border=True)
-        with container:
-            st.altair_chart(combined_chart, use_container_width=True)
+        with stylable_container(
+            key="container_with_border",
+            css_styles="""
+                {
+                    background-color: #F5F5F5;
+                    border: 2px solid rgba(49, 51, 63, 0.2);
+                    border-radius: 0.5rem;
+                    padding: calc(1em - 1px)
+                }
+                """,
+        ):
+            container = st.container()
+            with container:
+                st.altair_chart(combined_chart, use_container_width=True)
 
     # TAG: - Create Charts based on Frequency
+    # APPLY
     def create_charts_neid(
         self, df, param, site, x_param, y_param, neid, yaxis_range=None
     ):
@@ -584,7 +629,11 @@ class ChartGenerator:
                     ),
                 ),
             )
-            .properties(title="Payload Gbps", width=600, height=350)
+            .properties(
+                title="Payload Gbps",
+                height=350,
+                background="#F5F5F5",
+            )
             .configure_title(
                 fontSize=18,
                 anchor="middle",
@@ -609,8 +658,12 @@ class ChartGenerator:
                 symbolSize=30,
                 symbolType="square",
             )
+            .configure_view(strokeWidth=0)
         )
-        st.altair_chart(chart, use_container_width=True)
+
+        container = st.container()
+        with container:
+            st.altair_chart(chart, use_container_width=True)
 
     # TAG: - Create Charts hourly
     def create_charts_hourly(
@@ -661,7 +714,7 @@ class ChartGenerator:
             charts.append(sector_chart)
 
         combined_chart = (
-            alt.hconcat(*charts, autosize="fit")
+            alt.hconcat(*charts, autosize="fit", background="#F5F5F5")
             .configure_title(
                 fontSize=18,
                 anchor="middle",
@@ -677,7 +730,7 @@ class ChartGenerator:
                 padding=10,
                 titlePadding=10,
                 cornerRadius=10,
-                strokeColor="#9A9A9A",
+                # strokeColor="#9A9A9A",
                 columns=6,
                 titleAnchor="start",
                 direction="vertical",
@@ -688,9 +741,20 @@ class ChartGenerator:
             )
         )
 
-        container = st.container(border=True)
-        with container:
-            st.altair_chart(combined_chart, use_container_width=True)
+        with stylable_container(
+            key="container_with_border",
+            css_styles="""
+                {
+                    background-color: #F5F5F5;
+                    border: 2px solid rgba(49, 51, 63, 0.2);
+                    border-radius: 0.5rem;
+                    padding: calc(1em - 1px)
+                }
+                """,
+        ):
+            container = st.container()
+            with container:
+                st.altair_chart(combined_chart, use_container_width=True)
 
     # TAG: - Create Charts for VSWR
     def create_charts_vswr(self, df, x1_param, x2_param, y_param, nename):
@@ -751,10 +815,11 @@ class ChartGenerator:
                 column=alt.Facet(nename, type="nominal", title=""),
                 spacing=0,  # Remove spacing between facets
             )
-            .properties(
-                title="",
-            )
+            # .properties(
+            #     title="",
+            # )
             .resolve_scale(x="shared")  # Share x-axis scale across facets
+            .configure(background="#F5F5F5")
             .configure_title(
                 fontSize=18,
                 anchor="middle",
@@ -781,10 +846,21 @@ class ChartGenerator:
             )
             .configure_view(strokeWidth=0)
         )
-        col1, _ = st.columns([1.5, 1])
-        con1 = col1.container(border=True)
-        with con1:
-            st.altair_chart(chart, use_container_width=True)
+        with stylable_container(
+            key="container_with_border",
+            css_styles="""
+                {
+                    background-color: #F5F5F5;
+                    border: 2px solid rgba(49, 51, 63, 0.2);
+                    border-radius: 0.5rem;
+                    padding: calc(1em - 1px)
+                }
+                """,
+        ):
+            col1, _ = st.columns([1.5, 1])
+            con1 = col1.container()
+            with con1:
+                st.altair_chart(chart, use_container_width=True)
 
 
 class App:
@@ -816,8 +892,6 @@ class App:
     )
 
     def run(self):
-        # st.title("Site Data Analysis")
-
         # Create database session
         session, engine = self.database_session.create_session()
         if session is None:
@@ -964,7 +1038,7 @@ class App:
                     yaxis_ranges = [
                         [0, 105],
                         [50, 105],
-                        [-105, -145],
+                        [-130, -100],
                         [0, 5],
                         [0, 20],
                         [-120, -105],
@@ -1176,7 +1250,8 @@ class App:
                         y_param="UL_INT_PUSCH_y",
                         sector_param="EutranCell",
                         y2_avg="UL_INT_PUSCH_x",
-                        yaxis_range=None,
+                        yaxis_range=yaxis_ranges[2],
+                        yaxis_reverse=True,
                     )
 
                     # TAG: - Throughput Mpbs
@@ -1265,29 +1340,51 @@ class App:
                     )
                 # TAG: - Payload Neid
                 col1, col2 = st.columns([1, 1])
-                con1 = col1.container(border=True)
-                con2 = col2.container(border=True)
+                con1 = col1.container()
+                con2 = col2.container()
                 with con1:
-                    self.chart_generator.create_charts_neid(
-                        df=payload_data,
-                        param="Payload Frequency",
-                        site="Sites",
-                        x_param="DATE_ID",
-                        y_param="Payload_Total(Gb)",
-                        neid="NEID",
-                        yaxis_range=None,
-                    )
+                    with stylable_container(
+                        key="container_with_border",
+                        css_styles="""
+                            {
+                                background-color: #F5F5F5;
+                                border: 2px solid rgba(49, 51, 63, 0.2);
+                                border-radius: 0.5rem;
+                                padding: calc(1em - 1px)
+                            }
+                            """,
+                    ):
+                        self.chart_generator.create_charts_neid(
+                            df=payload_data,
+                            param="Payload Frequency",
+                            site="Sites",
+                            x_param="DATE_ID",
+                            y_param="Payload_Total(Gb)",
+                            neid="NEID",
+                            yaxis_range=None,
+                        )
 
                 with con2:
-                    self.chart_generator.create_charts_neid(
-                        df=payload_data,
-                        param="Payload By Site",
-                        site="Sites",
-                        x_param="DATE_ID",
-                        y_param="Payload_Total(Gb)",
-                        neid="SITEID",
-                        yaxis_range=None,
-                    )
+                    with stylable_container(
+                        key="container_with_border",
+                        css_styles="""
+                            {
+                                background-color: #F5F5F5;
+                                border: 2px solid rgba(49, 51, 63, 0.2);
+                                border-radius: 0.5rem;
+                                padding: calc(1em - 1px)
+                            }
+                            """,
+                    ):
+                        self.chart_generator.create_charts_neid(
+                            df=payload_data,
+                            param="Payload By Site",
+                            site="Sites",
+                            x_param="DATE_ID",
+                            y_param="Payload_Total(Gb)",
+                            neid="SITEID",
+                            yaxis_range=None,
+                        )
 
                 ltehourly_data = self.query_manager.get_ltehourly_data(
                     selected_sites, end_date
