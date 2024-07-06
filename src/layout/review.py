@@ -1,4 +1,5 @@
 import os
+import tempfile
 from datetime import timedelta
 
 import altair as alt
@@ -201,27 +202,53 @@ class QueryManager:
         return self.fetch_data(query, params=params)
 
     def get_target_data(self, city, mc_class, band):
+        # def get_target_data(self, city, band):
         query = text(
             """
         SELECT *
         FROM target
-        WHERE "City" = :city AND "MC Class" = :mc_class AND "Band" = :band
+        WHERE "City" = :city AND "Band" = :band AND "MC Class" = :mc_class
         """
         )
         return self.fetch_data(
-            query, {"city": city, "mc_class": mc_class, "band": band}
+            # query, {"city": city, "mc_class": mc_class, "band": band}
+            query,
+            {"city": city, "mc_class": mc_class, "band": band},
         )
 
     # def get_ltemdt_data(self, enodebid, ci):
-    def get_ltemdt_data(self, enodebid):
+    def get_ltemdt_data(self, selected_sites):
+        like_conditions = " OR ".join(
+            [f'"site" LIKE :site_{i}' for i in range(len(selected_sites))]
+        )
         query = text(
-            """
-        SELECT *
+            f"""
+        SELECT
+        site,
+        enodebid,
+        ci,
+        sample,
+        rsrp_mean,
+        rsrq_mean,
+        rank,
+        long_grid,
+        lat_grid
         FROM ltemdt
-        WHERE enodebid = :enodebid
+        WHERE ({like_conditions})
         """
         )
-        return self.fetch_data(query, {"enodebid": enodebid})
+        params = {f"site_{i}": f"%{site}%" for i, site in enumerate(selected_sites)}
+        return self.fetch_data(query, params=params)
+
+    # def get_ltemdt_data(self, enodebid):
+    #     query = text(
+    #         """
+    #     SELECT *
+    #     FROM ltemdt
+    #     WHERE enodebid = :enodebid
+    #     """
+    #     )
+    #     return self.fetch_data(query, {"enodebid": enodebid})
 
     def get_ltetastate_data(self, enodebid, ci):
         query = text(
@@ -300,7 +327,14 @@ class ChartGenerator:
         self, df, param, site, x_param, y_param, sector_param, yaxis_range=None
     ):
         sectors = sorted(df[sector_param].apply(self.determine_sector).unique())
-
+        # sorted_sectors = sorted(df[sector_param].unique())
+        # color_mapping = {
+        #     cell: color
+        #     for cell, color in zip(
+        #         sorted_sectors,
+        #         self.get_colors(len(sorted_sectors)),
+        #     )
+        # }
         color_mapping = {
             cell: color
             for cell, color in zip(
@@ -413,7 +447,7 @@ class ChartGenerator:
             sector_df = df[df[sector_param].apply(self.determine_sector) == sector]
 
             if yaxis_range and yaxis_reverse:
-                y_scale = alt.Scale(domain=yaxis_range, reverse=True)
+                y_scale = alt.Scale(zero=False, domain=yaxis_range, reverse=True)
             elif yaxis_range:
                 y_scale = alt.Scale(domain=yaxis_range)
             else:
@@ -446,10 +480,10 @@ class ChartGenerator:
             if y2_avg in sector_df.columns:
                 y2_avg_line = (
                     alt.Chart(sector_df)
-                    .mark_rule(color="red", strokeDash=[5, 5], size=1)
+                    .mark_rule(color="red", strokeDash=[10, 5], size=3, opacity=0.1)
                     .encode(y=alt.Y(y2_avg, type="quantitative", title="with Baseline"))
                 )
-                sector_chart = alt.layer(sector_chart, y2_avg_line)
+                sector_chart = alt.layer(y2_avg_line, sector_chart)
 
             charts.append(sector_chart)
 
@@ -649,7 +683,7 @@ class ChartGenerator:
                 padding=10,
                 titlePadding=10,
                 cornerRadius=10,
-                strokeColor="#9A9A9A",
+                # strokeColor="#9A9A9A",
                 columns=6,
                 titleAnchor="start",
                 direction="vertical",
@@ -835,7 +869,7 @@ class ChartGenerator:
                 padding=10,
                 titlePadding=10,
                 cornerRadius=10,
-                strokeColor="#9A9A9A",
+                # strokeColor="#9A9A9A",
                 columns=6,
                 titleAnchor="start",
                 direction="vertical",
@@ -863,6 +897,29 @@ class ChartGenerator:
                 st.altair_chart(chart, use_container_width=True)
 
 
+class TempDataManager:
+    def __init__(self):
+        self.temp_file = None
+
+    def save_data(self, df, filename):
+        if self.temp_file is None:
+            self.temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".csv")
+        df.to_csv(self.temp_file.name, index=False)
+        st.session_state[filename] = self.temp_file.name
+
+    def load_data(self, filename):
+        if filename in st.session_state:
+            return pd.read_csv(st.session_state[filename])
+        return None
+
+    def cleanup(self):
+        if self.temp_file:
+            try:
+                os.remove(self.temp_file.name)
+            except OSError:
+                pass
+
+
 class App:
     def __init__(self):
         self.config = Config().load()
@@ -871,6 +928,7 @@ class App:
         self.dataframe_manager = DataFrameManager()
         self.streamlit_interface = StreamlitInterface()
         self.chart_generator = ChartGenerator()
+        self.temp_data_manager = TempDataManager()
 
     st.set_page_config(layout="wide")
     st.markdown(
@@ -922,7 +980,7 @@ class App:
                 start_date, end_date = date_range
 
                 combined_target_data = []
-                combined_ltemdt_data = []
+                # combined_ltemdt_data = []
                 combined_ltetastate_data = []
                 combined_ltedaily_data = []
 
@@ -940,7 +998,11 @@ class App:
                     for _, row in mcom_data.iterrows():
                         # Get and append target data
                         target_data = self.query_manager.get_target_data(
-                            row["KABUPATEN"], row["MC_class"], row["LTE"]
+                            row["KABUPATEN"],
+                            row["MC_class"],
+                            row["LTE"],
+                            # row["KABUPATEN"],
+                            # row["LTE"],
                         )
                         target_data["EutranCell"] = row["Cell_Name"]
                         combined_target_data.append(target_data)
@@ -949,9 +1011,9 @@ class App:
                         # ltemdt_data = self.query_manager.get_ltemdt_data(
                         #     row["eNBId"], row["cellId"]
                         # )
-                        ltemdt_data = self.query_manager.get_ltemdt_data(row["eNBId"])
-                        ltemdt_data["EutranCell"] = row["Cell_Name"]
-                        combined_ltemdt_data.append(ltemdt_data)
+                        # ltemdt_data = self.query_manager.get_ltemdt_data(row["eNBId"])
+                        # ltemdt_data["EutranCell"] = row["Cell_Name"]
+                        # combined_ltemdt_data.append(ltemdt_data)
 
                         # Get and append ltetastate data
                         ltetastate_data = self.query_manager.get_ltetastate_data(
@@ -984,17 +1046,20 @@ class App:
                     #     "combined_target_data", "Combined Target Data"
                     # )
 
-                # Combine ltemdt data and display
-                if combined_ltemdt_data:
-                    combined_ltemdt_df = pd.concat(
-                        combined_ltemdt_data, ignore_index=True
-                    )
-                    self.dataframe_manager.add_dataframe(
-                        "combined_ltemdt_data", combined_ltemdt_df
-                    )
-                    self.dataframe_manager.display_dataframe(
-                        "combined_ltemdt_data", "Combined LTE MDT Data"
-                    )
+                # TAG: - Combine LTE MDT Data
+                # if combined_ltemdt_data:
+                #     combined_ltemdt_df = pd.concat(
+                #         combined_ltemdt_data, ignore_index=True
+                #     )
+                #     self.dataframe_manager.add_dataframe(
+                #         "combined_ltemdt_data", combined_ltemdt_df
+                #     )
+                #     self.dataframe_manager.display_dataframe(
+                #         "combined_ltemdt_data", "Combined LTE MDT Data"
+                #     )
+                #     self.temp_data_manager.save_data(
+                #         combined_ltemdt_df, "ltemdt_data_saved"
+                #     )
 
                 # Combine ltetastate data and display
                 if combined_ltetastate_data:
@@ -1038,7 +1103,7 @@ class App:
                     yaxis_ranges = [
                         [0, 105],
                         [50, 105],
-                        [-130, -100],
+                        [-130, 0],
                         [0, 5],
                         [0, 20],
                         [-120, -105],
@@ -1047,7 +1112,7 @@ class App:
                     # TAG: - Availability
                     st.markdown(
                         *styling(
-                            f"📈 Availability Site {siteid}",
+                            f"📶 Service Availability for Site {siteid}",
                             font_size=24,
                             text_align="left",
                             tag="h6",
@@ -1066,7 +1131,7 @@ class App:
                     # TAG: - RRC Setup Success Rate
                     st.markdown(
                         *styling(
-                            f"📈 RRC SR Site {siteid}",
+                            f"📶 RRC Success Rate for Site {siteid}",
                             font_size=24,
                             text_align="left",
                             tag="h6",
@@ -1087,7 +1152,7 @@ class App:
                     # TAG: - ERAB SR
                     st.markdown(
                         *styling(
-                            f"📈 ERAB SR Site {siteid}",
+                            f"📶 E-RAB Setup Success Rate for Site {siteid}",
                             font_size=24,
                             text_align="left",
                             tag="h6",
@@ -1108,7 +1173,7 @@ class App:
                     # TAG: - SSSR
                     st.markdown(
                         *styling(
-                            f"📈 SSSR Site {siteid}",
+                            f"📶 Session Setup Success Rate for Site {siteid}",
                             font_size=24,
                             text_align="left",
                             tag="h6",
@@ -1129,7 +1194,7 @@ class App:
                     # TAG: - CSSR
                     st.markdown(
                         *styling(
-                            f"📈 SAR Site {siteid}",
+                            f"📶 Session Abnormal Release Sectoral for Site {siteid}",
                             font_size=24,
                             text_align="left",
                             tag="h6",
@@ -1151,7 +1216,7 @@ class App:
                     # TAG: - CQI Non HOM
                     st.markdown(
                         *styling(
-                            f"📈 CQI NON HOM Site {siteid}",
+                            f"📶 CQI Distribution (Non-Homogeneous) Sectoral for Site {siteid}",
                             font_size=24,
                             text_align="left",
                             tag="h6",
@@ -1172,7 +1237,7 @@ class App:
                     # TAG: - Spectral Efficiency
                     st.markdown(
                         *styling(
-                            f"📈 SE Site {siteid}",
+                            f"📶 Spectral Efficiency Analysis Sectoral for Site {siteid}",
                             font_size=24,
                             text_align="left",
                             tag="h6",
@@ -1193,7 +1258,7 @@ class App:
                     # TAG: - Intra HO SR
                     st.markdown(
                         *styling(
-                            f"📈 Intra HO SR {siteid}",
+                            f"📶 Intra-Frequency Handover Performance Sectoral for Site {siteid} (%)",
                             font_size=24,
                             text_align="left",
                             tag="h6",
@@ -1214,7 +1279,7 @@ class App:
                     # TAG: - Inter HO SR
                     st.markdown(
                         *styling(
-                            f"📈 Inter HO SR {siteid}",
+                            f"📶 Inter-Frequency Handover Performance Sectoral for Site {siteid} (%)",
                             font_size=24,
                             text_align="left",
                             tag="h6",
@@ -1235,7 +1300,7 @@ class App:
                     # TAG: - UL RSSI
                     st.markdown(
                         *styling(
-                            f"📈 UL RSSI {siteid}",
+                            f"📶 Average UL RSSI Sectoral for Site {siteid} (dBm)",
                             font_size=24,
                             text_align="left",
                             tag="h6",
@@ -1257,7 +1322,7 @@ class App:
                     # TAG: - Throughput Mpbs
                     st.markdown(
                         *styling(
-                            f"📈 Throughput Mbps {siteid}",
+                            f"📶 Throughput (Mbps) Sectoral for Site {siteid}",
                             font_size=24,
                             text_align="left",
                             tag="h6",
@@ -1277,7 +1342,7 @@ class App:
                     # TAG: - Payload Sector
                     st.markdown(
                         *styling(
-                            f"📈 Payload Sectoral  {siteid}",
+                            f"📶 Payload Distribution Sectoral for Site {siteid} (Gpbs)",
                             font_size=24,
                             text_align="left",
                             tag="h6",
@@ -1299,30 +1364,11 @@ class App:
                 )
                 self.dataframe_manager.add_dataframe("payload_data", payload_data)
 
-                st.markdown(
-                    *styling(
-                        f"📈 CQI Overlay  {siteid}",
-                        font_size=24,
-                        text_align="left",
-                        tag="h6",
-                    )
-                )
-
-                self.chart_generator.create_charts(
-                    df=payload_data,
-                    param="CQI Overlay",
-                    site="Combined Sites",
-                    x_param="DATE_ID",
-                    y_param="CQI Bh",
-                    sector_param="EutranCell",
-                    yaxis_range=None,
-                )
-
                 col1, col2 = st.columns([1, 1])
                 with col1:
                     st.markdown(
                         *styling(
-                            f"📈 Payload By NEID  {siteid}",
+                            f"📶 Payload Distribution by Frequency for Site  {siteid} (Gpbs)",
                             font_size=24,
                             text_align="left",
                             tag="h6",
@@ -1332,7 +1378,7 @@ class App:
                 with col2:
                     st.markdown(
                         *styling(
-                            f"📈 Payload By SITE  {siteid}",
+                            f"📶 Total Site Payload Overview for Site {siteid} (Gpbs)",
                             font_size=24,
                             text_align="left",
                             tag="h6",
@@ -1386,6 +1432,25 @@ class App:
                             yaxis_range=None,
                         )
 
+                st.markdown(
+                    *styling(
+                        f"📶 CQI Comparison across Frequencies for Site {siteid}",
+                        font_size=24,
+                        text_align="left",
+                        tag="h6",
+                    )
+                )
+
+                self.chart_generator.create_charts(
+                    df=payload_data,
+                    param="CQI Overlay",
+                    site="Combined Sites",
+                    x_param="DATE_ID",
+                    y_param="CQI Bh",
+                    sector_param="EutranCell",
+                    yaxis_range=None,
+                )
+
                 ltehourly_data = self.query_manager.get_ltehourly_data(
                     selected_sites, end_date
                 )
@@ -1401,11 +1466,11 @@ class App:
                 # self.dataframe_manager.display_dataframe(
                 #     "ltehourly_data", "LTE Hourly Data"
                 # )
-                # TAG: - PRB & Active User
 
+                # TAG: - PRB & Active User
                 st.markdown(
                     *styling(
-                        f"📈 PRB Utilization {siteid}",
+                        f"📶 PRB Utilization Sectoral for Site {siteid}",
                         font_size=24,
                         text_align="left",
                         tag="h6",
@@ -1415,7 +1480,6 @@ class App:
                     df=ltehourly_data,
                     param="PRB Utilization",
                     site="Combined Sites",
-                    # x_param="DATE_ID",
                     x_param="datetime",
                     y_param="DL_Resource_Block_Utilizing_Rate",
                     sector_param="EUtranCellFDD",
@@ -1424,7 +1488,7 @@ class App:
 
                 st.markdown(
                     *styling(
-                        f"📈 Active User {siteid}",
+                        f"📶 Active User Sectoral for {siteid}",
                         font_size=24,
                         text_align="left",
                         tag="h6",
@@ -1434,7 +1498,6 @@ class App:
                     df=ltehourly_data,
                     param="Active User",
                     site="Combined Sites",
-                    # x_param="DATE_ID",
                     x_param="datetime",
                     y_param="Active User",
                     sector_param="EUtranCellFDD",
@@ -1448,13 +1511,12 @@ class App:
 
                 st.markdown(
                     *styling(
-                        f"📈 VSWR {siteid}",
+                        f"📶 VSWR Analysis for Site {siteid} (dBm)",
                         font_size=24,
                         text_align="left",
                         tag="h6",
                     )
                 )
-                # def create_charts_vswr(self, df, x1_param, x2_param, y_param, nename):
                 self.chart_generator.create_charts_vswr(
                     df=vswr_data,
                     # param="VSWR",
@@ -1465,6 +1527,11 @@ class App:
                     nename="RRU",
                 )
                 # Close session
+
+                ltemdtdata = self.query_manager.get_ltemdt_data(selected_sites)
+                self.dataframe_manager.add_dataframe("ltemdtdata", ltemdtdata)
+                self.dataframe_manager.display_dataframe("ltemdtdata", "LTE MDT Data")
+                self.temp_data_manager.cleanup()
                 session.close()
             else:
                 st.warning("Please select site IDs and date range to load data.")
