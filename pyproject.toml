@@ -37,6 +37,7 @@ pyarrow = "15.0.0"
 pyxlsb = "^1.0.10"
 plotly = "^5.22.0"
 streamlit-dynamic-filters = "^0.1.6"
+folium = "^0.17.0"
 
 
 [build-system]

@@ -3,6 +3,7 @@ import tempfile
 from datetime import timedelta
 
 import altair as alt
+import folium
 import pandas as pd
 import streamlit as st
 import toml
@@ -920,6 +921,187 @@ class TempDataManager:
                 pass
 
 
+class GeoApp:
+    def __init__(self, geocell_file, driveless_file):
+        self.geocell_data = pd.read_csv(geocell_file)
+        self.driveless_data = pd.read_csv(driveless_file)
+        self.unique_cis = sorted(self.geocell_data["cellId"].unique().tolist())
+        self.map_center = [
+            self.geocell_data["Latitude"].mean(),
+            self.geocell_data["Longitude"].mean(),
+        ]
+        self.map = folium.Map(
+            location=self.map_center,
+            zoom_start=10,
+            tiles="https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
+            attr="Google",
+        )
+
+    def get_dynamic_icon_color(self, ci):
+        ci_index = self.unique_cis.index(ci)
+        return ColorPalette.get_color(ci_index)
+
+    def get_rsrp_color(self, rsrp):
+        if rsrp >= -85:
+            return "blue"
+        elif -95 <= rsrp < -85:
+            return "green"
+        elif -105 <= rsrp < -95:
+            return "yellow"
+        elif -115 <= rsrp < -105:
+            return "orange"
+        else:
+            return "red"
+
+    def create_sector_polygon(self, lat, lon, azimuth, beamwidth, radius):
+        from math import asin, atan2, cos, degrees, radians, sin
+
+        lat_rad = radians(lat)
+        lon_rad = radians(lon)
+        azimuth_rad = radians(azimuth)
+        beamwidth_rad = radians(beamwidth)
+        num_points = 50
+        angle_step = beamwidth_rad / (num_points - 1)
+        start_angle = azimuth_rad - beamwidth_rad / 2
+        end_angle = azimuth_rad + beamwidth_rad / 2
+        points = []
+
+        for i in range(num_points):
+            angle = start_angle + i * angle_step
+            lat_new = asin(
+                sin(lat_rad) * cos(radius / 6371)
+                + cos(lat_rad) * sin(radius / 6371) * cos(angle)
+            )
+            lon_new = lon_rad + atan2(
+                sin(angle) * sin(radius / 6371) * cos(lat_rad),
+                cos(radius / 6371) - sin(lat_rad) * sin(lat_new),
+            )
+            points.append([degrees(lat_new), degrees(lon_new)])
+
+        points.append([lat, lon])
+        return points
+
+    def add_geocell_layer(self):
+        geocell_layer = folium.FeatureGroup(name="Geocell Sites")
+
+        for _, row in self.geocell_data.iterrows():
+            color = self.get_dynamic_icon_color(row["cellId"])
+            folium.CircleMarker(
+                location=[row["Latitude"], row["Longitude"]],
+                radius=6,
+                popup=f"Site: {row['Site_ID']}<br>Cell: {row['Cell_Name']}<br>CI: {row['cellId']}",
+                color=color,
+                fill=True,
+                fill_color=color,
+                fill_opacity=1.0,
+            ).add_to(geocell_layer)
+
+            folium.Marker(
+                location=[row["Latitude"], row["Longitude"]],
+                popup=row["Cell_Name"],
+                icon=folium.DivIcon(
+                    html=f'<div style="font-size: 24pt; color: white">{row["Cell_Name"]}</div>'
+                ),
+            ).add_to(geocell_layer)
+
+            sector_polygon = self.create_sector_polygon(
+                row["Latitude"],
+                row["Longitude"],
+                row["Dir"],
+                row["Ant_BW"],
+                row["Ant_Size"],
+            )
+            folium.Polygon(
+                locations=sector_polygon,
+                color="white",
+                fill=True,
+                fill_color=color,
+                fill_opacity=1.0,
+            ).add_to(geocell_layer)
+
+        geocell_layer.add_to(self.map)
+
+    def add_driveless_layer(self, color_by_rsrp=True):
+        driveless_layer = folium.FeatureGroup(name="Driveless Data")
+
+        for _, row in self.driveless_data.iterrows():
+            if color_by_rsrp:
+                # color = self.get_rsrp_color(row["rsrp_mean"])
+                color = self.get_dynamic_icon_color(row["ci"])
+            else:
+                color = self.get_rsrp_color(row["rsrp_mean"])
+                # color = self.get_dynamic_icon_color(row["ci"])
+            folium.CircleMarker(
+                location=[row["lat_grid"], row["long_grid"]],
+                radius=4,
+                popup=f"CI: {row['ci']} RSRP: {row['rsrp_mean']} dBm",
+                color=color,
+                fill=True,
+                fill_color=color,
+                fill_opacity=1,
+            ).add_to(driveless_layer)
+
+        driveless_layer.add_to(self.map)
+
+    def add_spider_graph(self):
+        for _, row in self.driveless_data.iterrows():
+            geocell_match = self.geocell_data[
+                (self.geocell_data["cellId"] == row["ci"])
+                & (self.geocell_data["eNBId"] == row["enodebid"])
+            ]
+            if not geocell_match.empty:
+                geocell_lat = geocell_match["Latitude"].values[0]
+                geocell_lon = geocell_match["Longitude"].values[0]
+                color = self.get_dynamic_icon_color(row["ci"])
+                folium.PolyLine(
+                    locations=[
+                        [row["lat_grid"], row["long_grid"]],
+                        [geocell_lat, geocell_lon],
+                    ],
+                    color=color,
+                    weight=1,
+                    opacity=0.5,
+                ).add_to(self.map)
+
+    def display_map(self):
+        folium.LayerControl().add_to(self.map)
+        st.components.v1.html(self.map._repr_html_(), height=500)
+
+    def display_legend(self):
+        st.subheader("Legend")
+        st.markdown("### Legend")
+        st.markdown("**Geocell Site Markers:**")
+        for index, ci in enumerate(self.unique_cis):
+            color = ColorPalette.get_color(index)
+            st.markdown(
+                f'<span style="color:{color};">{ci}: {color}</span>',
+                unsafe_allow_html=True,
+            )
+
+    def run(self):
+        st.set_page_config(layout="wide")
+        st.title("Geocell Site Mapping")
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.subheader("Map")
+            self.add_geocell_layer()
+            color_by_rsrp = st.checkbox("Color driveless data by RSRP", value=True)
+            self.add_driveless_layer(color_by_rsrp)
+            self.display_map()
+
+        with col2:
+            self.display_legend()
+
+        with col3:
+            st.subheader("Other")
+            show_spider_graph = st.checkbox("Show Spider Graph")
+
+            if show_spider_graph:
+                self.add_spider_graph()
+                self.display_map()
+
+
 class App:
     def __init__(self):
         self.config = Config().load()
@@ -990,9 +1172,9 @@ class App:
                     self.dataframe_manager.add_dataframe(
                         f"mcom_data_{siteid}", mcom_data
                     )
-                    # self.dataframe_manager.display_dataframe(
-                    #     f"mcom_data_{siteid}", f"MCOM Data for Site: {siteid}"
-                    # )
+                    self.dataframe_manager.display_dataframe(
+                        f"mcom_data_{siteid}", f"MCOM Data for Site: {siteid}"
+                    )
 
                     # Fetch additional data based on mcom results
                     for _, row in mcom_data.iterrows():
