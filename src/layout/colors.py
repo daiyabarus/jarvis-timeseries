@@ -1,61 +1,75 @@
-# colors.py
 from typing import ClassVar
 
 
 class ColorPalette:
     color_codes: ClassVar[list[str]] = [
-        "#00A86B",  # Jade
-        "#4B0082",  # Indigo
-        "#800000",  # Maroon
-        "#FFA500",  # Orange
-        "#F9BC4B",  # Dodger Blue
-        "#8B4513",  # Saddle Brown
-        "#9932CC",  # Dark Orchid
-        "#00FF00",  # Lime
-        "#800080",  # Purple
-        "#FF1493",  # Deep Pink
-        "#4682B4",  # Steel Blue
-        "#FFD700",  # Gold
-        "#32CD32",  # Lime Green
-        "#FF00FF",  # Magenta
-        "#1E4D2B",  # Forest Green
-        "#CD853F",  # Peru
-        "#00BFFF",  # Deep Sky Blue
-        "#DC143C",  # Crimson
-        "#7CFC00",  # Lawn Green
-        "#FFFF00",  # Yellow
-        "#40E0D0",  # Turquoise
-        "#B8860B",  # Dark Goldenrod
-        "#E9967A",  # Dark Salmon
-        "#8FBC8F",  # Dark Sea Green
-        "#8B0000",  # Dark Red
-        "#00CED1",  # Dark Turquoise
-        "#483D8B",  # Dark Slate Blue
-        "#2F4F4F",  # Dark Slate Gray
-        "#4B0150",  # Dark Purple
-        "#FF8C00",  # Dark Orange
-        "#556B2F",  # Dark Olive Green
-        "#FF0000",  # Red
-        "#FF6347",  # Tomato
-        "#6B8E23",  # Olive Drab
-        "#FFE4B5",  # Moccasin
-        "#008080",  # Teal
-        "#FFC0CB",  # Pink
-        "#00FF7F",  # Spring Green
-        "#FF4500",  # Orange Red
-        "#F0E68C",  # Khaki
-        "#4169E1",  # Royal Blue
-        "#F4A460",  # Sandy Brown
-        "#7B68EE",  # Medium Slate Blue
-        "#A0522D",  # Sienna
-        "#C71585",  # Medium Violet Red
-        "#66CDAA",  # Medium Aquamarine
-        "#D2691E",  # Chocolate
-        "#DB7093",  # Pale Violet Red
-        "#DDA0DD",  # Plum
-        "#008000",  # Green
+        "#00A86B",
+        "#B60008",
+        "#800000",
+        "#5E2EA7",
+        "#091F2E",
+        "#D26939",
+        "#9932CC",
+        "#00FF00",
+        "#800080",
+        "#FF1493",
+        "#4682B4",
+        "#FF7795",
+        "#32CD32",
+        "#FF00FF",
+        "#1E4D2B",
+        "#CD853F",
+        "#00BFFF",
+        "#DC143C",
+        "#838996",
+        "#195466",
+        "#40E0D0",
+        "#B8860B",
+        "#E9967A",
+        "#8FBC8F",
+        "#8B0000",
+        "#00CED1",
+        "#483D8B",
+        "#2F4F4F",
+        "#4B0150",
+        "#FF8C00",
+        "#556B2F",
+        "#FF0000",
+        "#FF6347",
+        "#6B8E23",
+        "#FFE4B5",
+        "#008080",
+        "#FFC0CB",
+        "#00FF7F",
+        "#FF4500",
+        "#F0E68C",
+        "#4169E1",
+        "#F4A460",
+        "#7B68EE",
+        "#A0522D",
+        "#C71585",
+        "#66CDAA",
+        "#D2691E",
+        "#DB7093",
+        "#DDA0DD",
+        "#008000",
     ]
+    last_colors: ClassVar[list[str]] = []
 
     @classmethod
     def get_color(cls, index: int) -> str:
-        return cls.color_codes[index % len(cls.color_codes)]
+        # Ensure the color list is long enough for selection
+        extended_colors = cls.color_codes * ((index // len(cls.color_codes)) + 1)
+        selected_color = extended_colors[index]
+
+        # Check if the selected color is in the last 5 used colors
+        while selected_color in cls.last_colors:
+            index += 1
+            selected_color = extended_colors[index % len(cls.color_codes)]
+
+        # Update the last colors list
+        cls.last_colors.append(selected_color)
+        if len(cls.last_colors) > 5:
+            cls.last_colors.pop(0)
+
+        return selected_color

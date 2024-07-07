@@ -7,6 +7,7 @@ import folium
 import pandas as pd
 import streamlit as st
 import toml
+from branca.element import MacroElement, Template
 from colors import ColorPalette
 from omegaconf import DictConfig, OmegaConf
 from sqlalchemy import create_engine, text
@@ -923,35 +924,66 @@ class TempDataManager:
 
 class GeoApp:
     def __init__(self, geocell_file, driveless_file):
-        self.geocell_data = pd.read_csv(geocell_file)
-        self.driveless_data = pd.read_csv(driveless_file)
-        self.unique_cis = sorted(self.geocell_data["cellId"].unique().tolist())
-        self.map_center = [
+        self.geocell_data = self.load_data(geocell_file)
+        self.driveless_data = self.load_data(driveless_file)
+        self.unique_cis = self.get_unique_cis()
+        self.map_center = self.calculate_map_center()
+        self.tile_options = self.define_tile_options()
+        self.map = None
+
+    @staticmethod
+    def load_data(file_path):
+        """Load data from a CSV file."""
+        return pd.read_csv(file_path)
+
+    def get_unique_cis(self):
+        """Extract and sort unique Cell IDs."""
+        return sorted(self.geocell_data["cellId"].unique())
+
+    def calculate_map_center(self):
+        """Calculate the geographic center of the map."""
+        return [
             self.geocell_data["Latitude"].mean(),
             self.geocell_data["Longitude"].mean(),
         ]
+
+    @staticmethod
+    def define_tile_options():
+        """Define map tile options."""
+        return {
+            "Openstreetmap": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+            "Google Hybrid": "https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
+        }
+
+    def initialize_map(self):
+        """Initialize the map with a selected tile provider."""
+        tile_provider = st.selectbox(
+            "Select Map", list(self.tile_options.keys()), index=1
+        )
         self.map = folium.Map(
             location=self.map_center,
-            zoom_start=10,
-            tiles="https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
-            attr="Google",
+            zoom_start=15,
+            tiles=self.tile_options[tile_provider],
+            attr=tile_provider,
         )
 
-    def get_dynamic_icon_color(self, ci):
+    def get_ci_color(self, ci):
+        """Get color based on Cell ID index."""
         ci_index = self.unique_cis.index(ci)
         return ColorPalette.get_color(ci_index)
 
     def get_rsrp_color(self, rsrp):
-        if rsrp >= -85:
-            return "blue"
-        elif -95 <= rsrp < -85:
-            return "green"
-        elif -105 <= rsrp < -95:
-            return "yellow"
-        elif -115 <= rsrp < -105:
-            return "orange"
-        else:
-            return "red"
+        """
+        Determines the color representation based on the RSRP value.
+
+        :param rsrp: The RSRP value to evaluate.
+        :return: A string representing the color associated with the RSRP range.
+        """
+        ranges = [(-85, "blue"), (-95, "green"), (-105, "yellow"), (-115, "orange")]
+        for limit, color in ranges:
+            if rsrp >= limit:
+                return color
+        return "red"
 
     def create_sector_polygon(self, lat, lon, azimuth, beamwidth, radius):
         from math import asin, atan2, cos, degrees, radians, sin
@@ -963,7 +995,6 @@ class GeoApp:
         num_points = 50
         angle_step = beamwidth_rad / (num_points - 1)
         start_angle = azimuth_rad - beamwidth_rad / 2
-        end_angle = azimuth_rad + beamwidth_rad / 2
         points = []
 
         for i in range(num_points):
@@ -978,59 +1009,74 @@ class GeoApp:
             )
             points.append([degrees(lat_new), degrees(lon_new)])
 
-        points.append([lat, lon])
+        points.append([lat, lon])  # Return to the starting point for a complete polygon
         return points
 
     def add_geocell_layer(self):
         geocell_layer = folium.FeatureGroup(name="Geocell Sites")
 
         for _, row in self.geocell_data.iterrows():
-            color = self.get_dynamic_icon_color(row["cellId"])
-            folium.CircleMarker(
-                location=[row["Latitude"], row["Longitude"]],
-                radius=6,
-                popup=f"Site: {row['Site_ID']}<br>Cell: {row['Cell_Name']}<br>CI: {row['cellId']}",
-                color=color,
-                fill=True,
-                fill_color=color,
-                fill_opacity=1.0,
-            ).add_to(geocell_layer)
-
-            folium.Marker(
-                location=[row["Latitude"], row["Longitude"]],
-                popup=row["Cell_Name"],
-                icon=folium.DivIcon(
-                    html=f'<div style="font-size: 24pt; color: white">{row["Cell_Name"]}</div>'
-                ),
-            ).add_to(geocell_layer)
-
-            sector_polygon = self.create_sector_polygon(
-                row["Latitude"],
-                row["Longitude"],
-                row["Dir"],
-                row["Ant_BW"],
-                row["Ant_Size"],
-            )
-            folium.Polygon(
-                locations=sector_polygon,
-                color="white",
-                fill=True,
-                fill_color=color,
-                fill_opacity=1.0,
-            ).add_to(geocell_layer)
+            color = self.get_ci_color(row["cellId"])
+            self.add_circle_marker(row, color, geocell_layer)
+            self.add_custom_marker(row, geocell_layer)
+            self.add_sector_polygon(row, color, geocell_layer)
 
         geocell_layer.add_to(self.map)
 
-    def add_driveless_layer(self, color_by_rsrp=True):
+    def create_popup_content(self, row):
+        return f"""
+        <div style="font-family: Arial; font-size: 12px;">
+            <b>Site:</b> {row['Site_ID']}<br>
+            <b>Cell:</b> {row['Cell_Name']}<br>
+            <b>CI:</b> {row['cellId']}
+        </div>
+        """
+
+    def add_circle_marker(self, row, color, layer):
+        popup_content = self.create_popup_content(row)
+        folium.CircleMarker(
+            location=[row["Latitude"], row["Longitude"]],
+            radius=6,
+            popup=folium.Popup(popup_content, max_width=250),
+            color=color,
+            fill=True,
+            fill_color=color,
+            fill_opacity=1.0,
+        ).add_to(layer)
+
+    def add_custom_marker(self, row, layer):
+        folium.Marker(
+            location=[row["Latitude"], row["Longitude"]],
+            popup=row["Site_ID"],
+            icon=folium.DivIcon(
+                html=f'<div style="font-size: 24pt; color: white">{row["Site_ID"]}</div>'
+            ),
+        ).add_to(layer)
+
+    def add_sector_polygon(self, row, color, layer):
+        sector_polygon = self.create_sector_polygon(
+            row["Latitude"],
+            row["Longitude"],
+            row["Dir"],
+            row["Ant_BW"],
+            row["Ant_Size"],
+        )
+        folium.Polygon(
+            locations=sector_polygon,
+            color="black",
+            fill=True,
+            fill_color=color,
+            fill_opacity=1.0,
+        ).add_to(layer)
+
+    def add_driveless_layer(self, color_by_ci=True):
         driveless_layer = folium.FeatureGroup(name="Driveless Data")
 
         for _, row in self.driveless_data.iterrows():
-            if color_by_rsrp:
-                # color = self.get_rsrp_color(row["rsrp_mean"])
-                color = self.get_dynamic_icon_color(row["ci"])
+            if color_by_ci:
+                color = self.get_ci_color(row["ci"])
             else:
                 color = self.get_rsrp_color(row["rsrp_mean"])
-                # color = self.get_dynamic_icon_color(row["ci"])
             folium.CircleMarker(
                 location=[row["lat_grid"], row["long_grid"]],
                 radius=4,
@@ -1052,7 +1098,7 @@ class GeoApp:
             if not geocell_match.empty:
                 geocell_lat = geocell_match["Latitude"].values[0]
                 geocell_lon = geocell_match["Longitude"].values[0]
-                color = self.get_dynamic_icon_color(row["ci"])
+                color = self.get_ci_color(row["ci"])
                 folium.PolyLine(
                     locations=[
                         [row["lat_grid"], row["long_grid"]],
@@ -1065,12 +1111,11 @@ class GeoApp:
 
     def display_map(self):
         folium.LayerControl().add_to(self.map)
-        st.components.v1.html(self.map._repr_html_(), height=500)
+        self.add_legend()
+        st.components.v1.html(self.map._repr_html_(), height=800)
 
     def display_legend(self):
         st.subheader("Legend")
-        st.markdown("### Legend")
-        st.markdown("**Geocell Site Markers:**")
         for index, ci in enumerate(self.unique_cis):
             color = ColorPalette.get_color(index)
             st.markdown(
@@ -1078,28 +1123,83 @@ class GeoApp:
                 unsafe_allow_html=True,
             )
 
+    def add_legend(self):
+        # Combined Legend
+        combined_legend_template = """
+        {% macro html(this, kwargs) %}
+        <div id='maplegend' class='maplegend'
+            style='position: absolute; z-index:9999; background-color: rgba(255, 255, 255, 0.5);
+            border-radius: 6px; padding: 10px; font-size: 12px; right: 12px; top: 70px;'>
+        <div class='legend-scale'>
+          <ul class='legend-labels'>
+            <li><strong>RSRP</strong></li>
+            <li><span style='background: blue; opacity: 0.75;'></span>RSRP >= -85</li>
+            <li><span style='background: green; opacity: 0.75;'></span>-95 <= RSRP < -85</li>
+            <li><span style='background: yellow; opacity: 0.75;'></span>-105 <= RSRP < -95</li>
+            <li><span style='background: orange; opacity: 0.75;'></span>-115 <= RSRP < -105</li>
+            <li><span style='background: red; opacity: 0.75;'></span>RSRP < -115</li>
+          </ul>
+          <ul class='legend-labels'>
+            <li><strong>CELL IDENTITY</strong></li>
+        """
+        for index, ci in enumerate(self.unique_cis):
+            color = ColorPalette.get_color(index)
+            combined_legend_template += f"<li><span style='background: {color}; opacity: 0.75;'></span>CI {ci}</li>"
+
+        combined_legend_template += """
+          </ul>
+        </div>
+        </div>
+        <style type='text/css'>
+          .maplegend .legend-scale ul {margin: 0; padding: 0; color: #0f0f0f;}
+          .maplegend .legend-scale ul li {list-style: none; line-height: 18px; margin-bottom: 1.5px;}
+          .maplegend ul.legend-labels li span {float: left; height: 16px; width: 16px; margin-right: 4.5px;}
+        </style>
+        {% endmacro %}
+        """
+        combined_macro = MacroElement()
+        combined_macro._template = Template(combined_legend_template)
+        self.map.get_root().add_child(combined_macro)
+
     def run(self):
-        st.set_page_config(layout="wide")
-        st.title("Geocell Site Mapping")
-        col1, col2, col3 = st.columns(3)
+        col1, col2, _, _ = st.columns([1, 1, 2, 2])
 
         with col1:
-            st.subheader("Map")
+            self.initialize_map()
+
+        with col2:
+            category = st.selectbox(
+                "Category",
+                ["CellId", "RSRP", "CellId with Spidergraph", "RSRP with Spidergraph"],
+            )
+
+        col1, col2, col3 = st.columns([3, 1, 1])
+
+        with col1:
             self.add_geocell_layer()
-            color_by_rsrp = st.checkbox("Color driveless data by RSRP", value=True)
-            self.add_driveless_layer(color_by_rsrp)
+            color_by_ci = "CellId" in category
+            self.add_driveless_layer(color_by_ci=color_by_ci)
+
+            if "Spidergraph" in category:
+                self.add_spider_graph()
+
             self.display_map()
 
         with col2:
-            self.display_legend()
+            st.markdown("---")
 
         with col3:
-            st.subheader("Other")
-            show_spider_graph = st.checkbox("Show Spider Graph")
+            st.markdown("---")
 
-            if show_spider_graph:
-                self.add_spider_graph()
-                self.display_map()
+
+# if __name__ == "__main__":
+#     st.set_page_config(layout="wide")
+#     script_dir = os.path.dirname(__file__)
+#     sitelist_mcom = os.path.join(script_dir, "test_geocell.csv")
+#     sitelist_driveless = os.path.join(script_dir, "test_driveless.csv")
+
+#     app = GeoApp(sitelist_mcom, sitelist_driveless)
+#     app.run()
 
 
 class App:
@@ -1701,8 +1801,6 @@ class App:
                 )
                 self.chart_generator.create_charts_vswr(
                     df=vswr_data,
-                    # param="VSWR",
-                    # site="Combined Sites",
                     x1_param="DATE_ID",
                     x2_param="RRU",
                     y_param="VSWR",

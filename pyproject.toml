@@ -2,7 +2,7 @@
 name = "forged-timeseries"
 version = "0.1.0"
 description = ""
-authors = ["daiyabarus <daiyabarus@gmail.com>"]
+authors = ["barros <debu69er@gmail.com>"]
 license = "MIT"
 readme = "README.md"
 
@@ -38,7 +38,22 @@ pyxlsb = "^1.0.10"
 plotly = "^5.22.0"
 streamlit-dynamic-filters = "^0.1.6"
 folium = "^0.17.0"
-
+geemap = "^0.32.1"
+setuptools = "^70.2.0"
+# geopandas
+# jupyter-server-proxy
+# keplergl
+# leafmap
+# localtileserver
+# nbserverproxy
+# owslib
+# palettable
+# plotly
+# streamlit
+# streamlit-bokeh-events
+# streamlit-folium
+# streamlit-keplergl
+# tropycal
 
 [build-system]
 requires = ["poetry-core"]
