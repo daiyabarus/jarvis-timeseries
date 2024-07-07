@@ -1,14 +1,13 @@
 import os
-import tempfile
-from datetime import timedelta
 
 import altair as alt
-import folium
 import pandas as pd
 import streamlit as st
 import toml
-from branca.element import MacroElement, Template
 from colors import ColorPalette
+
+# from streamlit_dynamic_filters import DynamicFilters
+from geoapp import GeoApp
 from omegaconf import DictConfig, OmegaConf
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
@@ -184,7 +183,7 @@ class QueryManager:
         like_conditions = " OR ".join(
             [f'"EUtranCellFDD" LIKE :site_{i}' for i in range(len(selected_sites))]
         )
-        start_date = end_date - timedelta(days=15)
+        start_date = end_date - pd.Timedelta(days=15)
         query = text(
             f"""
         SELECT
@@ -268,7 +267,7 @@ class QueryManager:
         )
 
         # Calculate start_date as one day before end_date
-        start_date = end_date - timedelta(days=1)
+        start_date = end_date - pd.Timedelta(days=1)
 
         query = text(
             f"""
@@ -329,14 +328,6 @@ class ChartGenerator:
         self, df, param, site, x_param, y_param, sector_param, yaxis_range=None
     ):
         sectors = sorted(df[sector_param].apply(self.determine_sector).unique())
-        # sorted_sectors = sorted(df[sector_param].unique())
-        # color_mapping = {
-        #     cell: color
-        #     for cell, color in zip(
-        #         sorted_sectors,
-        #         self.get_colors(len(sorted_sectors)),
-        #     )
-        # }
         color_mapping = {
             cell: color
             for cell, color in zip(
@@ -845,22 +836,23 @@ class ChartGenerator:
         )
 
         # Combine charts and add facet for NE_NAME
-        chart = (
-            (bars + highlight + baseline)
-            .facet(
-                column=alt.Facet(nename, type="nominal", title=""),
+        base_chart = bars + highlight + baseline
+
+        # Configure facet, scale, and view
+        chart_with_facet_and_scale = (
+            base_chart.facet(
+                column=alt.Facet("nename", type="nominal", title=""),
                 spacing=0,  # Remove spacing between facets
             )
-            # .properties(
-            #     title="",
-            # )
             .resolve_scale(x="shared")  # Share x-axis scale across facets
-            .configure(background="#F5F5F5")
+            .configure_view(strokeWidth=0)
+        )
+
+        # Configure chart appearance
+        configured_chart = (
+            chart_with_facet_and_scale.configure(background="#F5F5F5")
             .configure_title(
-                fontSize=18,
-                anchor="middle",
-                font="Vodafone",
-                color="#717577",
+                fontSize=18, anchor="middle", font="Vodafone", color="#717577"
             )
             .configure_legend(
                 orient="bottom",
@@ -871,7 +863,6 @@ class ChartGenerator:
                 padding=10,
                 titlePadding=10,
                 cornerRadius=10,
-                # strokeColor="#9A9A9A",
                 columns=6,
                 titleAnchor="start",
                 direction="vertical",
@@ -880,8 +871,9 @@ class ChartGenerator:
                 symbolSize=30,
                 symbolType="square",
             )
-            .configure_view(strokeWidth=0)
         )
+
+        chart = configured_chart
         with stylable_container(
             key="container_with_border",
             css_styles="""
@@ -899,309 +891,6 @@ class ChartGenerator:
                 st.altair_chart(chart, use_container_width=True)
 
 
-class TempDataManager:
-    def __init__(self):
-        self.temp_file = None
-
-    def save_data(self, df, filename):
-        if self.temp_file is None:
-            self.temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".csv")
-        df.to_csv(self.temp_file.name, index=False)
-        st.session_state[filename] = self.temp_file.name
-
-    def load_data(self, filename):
-        if filename in st.session_state:
-            return pd.read_csv(st.session_state[filename])
-        return None
-
-    def cleanup(self):
-        if self.temp_file:
-            try:
-                os.remove(self.temp_file.name)
-            except OSError:
-                pass
-
-
-class GeoApp:
-    def __init__(self, geocell_file, driveless_file):
-        self.geocell_data = self.load_data(geocell_file)
-        self.driveless_data = self.load_data(driveless_file)
-        self.unique_cis = self.get_unique_cis()
-        self.map_center = self.calculate_map_center()
-        self.tile_options = self.define_tile_options()
-        self.map = None
-
-    @staticmethod
-    def load_data(file_path):
-        """Load data from a CSV file."""
-        return pd.read_csv(file_path)
-
-    def get_unique_cis(self):
-        """Extract and sort unique Cell IDs."""
-        return sorted(self.geocell_data["cellId"].unique())
-
-    def calculate_map_center(self):
-        """Calculate the geographic center of the map."""
-        return [
-            self.geocell_data["Latitude"].mean(),
-            self.geocell_data["Longitude"].mean(),
-        ]
-
-    @staticmethod
-    def define_tile_options():
-        """Define map tile options."""
-        return {
-            "Openstreetmap": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-            "Google Hybrid": "https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
-        }
-
-    def initialize_map(self):
-        """Initialize the map with a selected tile provider."""
-        tile_provider = st.selectbox(
-            "Select Map", list(self.tile_options.keys()), index=1
-        )
-        self.map = folium.Map(
-            location=self.map_center,
-            zoom_start=15,
-            tiles=self.tile_options[tile_provider],
-            attr=tile_provider,
-        )
-
-    def get_ci_color(self, ci):
-        """Get color based on Cell ID index."""
-        ci_index = self.unique_cis.index(ci)
-        return ColorPalette.get_color(ci_index)
-
-    def get_rsrp_color(self, rsrp):
-        """
-        Determines the color representation based on the RSRP value.
-
-        :param rsrp: The RSRP value to evaluate.
-        :return: A string representing the color associated with the RSRP range.
-        """
-        ranges = [(-85, "blue"), (-95, "green"), (-105, "yellow"), (-115, "orange")]
-        for limit, color in ranges:
-            if rsrp >= limit:
-                return color
-        return "red"
-
-    def create_sector_polygon(self, lat, lon, azimuth, beamwidth, radius):
-        from math import asin, atan2, cos, degrees, radians, sin
-
-        lat_rad = radians(lat)
-        lon_rad = radians(lon)
-        azimuth_rad = radians(azimuth)
-        beamwidth_rad = radians(beamwidth)
-        num_points = 50
-        angle_step = beamwidth_rad / (num_points - 1)
-        start_angle = azimuth_rad - beamwidth_rad / 2
-        points = []
-
-        for i in range(num_points):
-            angle = start_angle + i * angle_step
-            lat_new = asin(
-                sin(lat_rad) * cos(radius / 6371)
-                + cos(lat_rad) * sin(radius / 6371) * cos(angle)
-            )
-            lon_new = lon_rad + atan2(
-                sin(angle) * sin(radius / 6371) * cos(lat_rad),
-                cos(radius / 6371) - sin(lat_rad) * sin(lat_new),
-            )
-            points.append([degrees(lat_new), degrees(lon_new)])
-
-        points.append([lat, lon])  # Return to the starting point for a complete polygon
-        return points
-
-    def add_geocell_layer(self):
-        geocell_layer = folium.FeatureGroup(name="Geocell Sites")
-
-        for _, row in self.geocell_data.iterrows():
-            color = self.get_ci_color(row["cellId"])
-            self.add_circle_marker(row, color, geocell_layer)
-            self.add_custom_marker(row, geocell_layer)
-            self.add_sector_polygon(row, color, geocell_layer)
-
-        geocell_layer.add_to(self.map)
-
-    def create_popup_content(self, row):
-        return f"""
-        <div style="font-family: Arial; font-size: 12px;">
-            <b>Site:</b> {row['Site_ID']}<br>
-            <b>Cell:</b> {row['Cell_Name']}<br>
-            <b>CI:</b> {row['cellId']}
-        </div>
-        """
-
-    def add_circle_marker(self, row, color, layer):
-        popup_content = self.create_popup_content(row)
-        folium.CircleMarker(
-            location=[row["Latitude"], row["Longitude"]],
-            radius=6,
-            popup=folium.Popup(popup_content, max_width=250),
-            color=color,
-            fill=True,
-            fill_color=color,
-            fill_opacity=1.0,
-        ).add_to(layer)
-
-    def add_custom_marker(self, row, layer):
-        folium.Marker(
-            location=[row["Latitude"], row["Longitude"]],
-            popup=row["Site_ID"],
-            icon=folium.DivIcon(
-                html=f'<div style="font-size: 24pt; color: white">{row["Site_ID"]}</div>'
-            ),
-        ).add_to(layer)
-
-    def add_sector_polygon(self, row, color, layer):
-        sector_polygon = self.create_sector_polygon(
-            row["Latitude"],
-            row["Longitude"],
-            row["Dir"],
-            row["Ant_BW"],
-            row["Ant_Size"],
-        )
-        folium.Polygon(
-            locations=sector_polygon,
-            color="black",
-            fill=True,
-            fill_color=color,
-            fill_opacity=1.0,
-        ).add_to(layer)
-
-    def add_driveless_layer(self, color_by_ci=True):
-        driveless_layer = folium.FeatureGroup(name="Driveless Data")
-
-        for _, row in self.driveless_data.iterrows():
-            if color_by_ci:
-                color = self.get_ci_color(row["ci"])
-            else:
-                color = self.get_rsrp_color(row["rsrp_mean"])
-            folium.CircleMarker(
-                location=[row["lat_grid"], row["long_grid"]],
-                radius=4,
-                popup=f"CI: {row['ci']} RSRP: {row['rsrp_mean']} dBm",
-                color=color,
-                fill=True,
-                fill_color=color,
-                fill_opacity=1,
-            ).add_to(driveless_layer)
-
-        driveless_layer.add_to(self.map)
-
-    def add_spider_graph(self):
-        for _, row in self.driveless_data.iterrows():
-            geocell_match = self.geocell_data[
-                (self.geocell_data["cellId"] == row["ci"])
-                & (self.geocell_data["eNBId"] == row["enodebid"])
-            ]
-            if not geocell_match.empty:
-                geocell_lat = geocell_match["Latitude"].values[0]
-                geocell_lon = geocell_match["Longitude"].values[0]
-                color = self.get_ci_color(row["ci"])
-                folium.PolyLine(
-                    locations=[
-                        [row["lat_grid"], row["long_grid"]],
-                        [geocell_lat, geocell_lon],
-                    ],
-                    color=color,
-                    weight=1,
-                    opacity=0.5,
-                ).add_to(self.map)
-
-    def display_map(self):
-        folium.LayerControl().add_to(self.map)
-        self.add_legend()
-        st.components.v1.html(self.map._repr_html_(), height=800)
-
-    def display_legend(self):
-        st.subheader("Legend")
-        for index, ci in enumerate(self.unique_cis):
-            color = ColorPalette.get_color(index)
-            st.markdown(
-                f'<span style="color:{color};">{ci}: {color}</span>',
-                unsafe_allow_html=True,
-            )
-
-    def add_legend(self):
-        # Combined Legend
-        combined_legend_template = """
-        {% macro html(this, kwargs) %}
-        <div id='maplegend' class='maplegend'
-            style='position: absolute; z-index:9999; background-color: rgba(255, 255, 255, 0.5);
-            border-radius: 6px; padding: 10px; font-size: 12px; right: 12px; top: 70px;'>
-        <div class='legend-scale'>
-          <ul class='legend-labels'>
-            <li><strong>RSRP</strong></li>
-            <li><span style='background: blue; opacity: 0.75;'></span>RSRP >= -85</li>
-            <li><span style='background: green; opacity: 0.75;'></span>-95 <= RSRP < -85</li>
-            <li><span style='background: yellow; opacity: 0.75;'></span>-105 <= RSRP < -95</li>
-            <li><span style='background: orange; opacity: 0.75;'></span>-115 <= RSRP < -105</li>
-            <li><span style='background: red; opacity: 0.75;'></span>RSRP < -115</li>
-          </ul>
-          <ul class='legend-labels'>
-            <li><strong>CELL IDENTITY</strong></li>
-        """
-        for index, ci in enumerate(self.unique_cis):
-            color = ColorPalette.get_color(index)
-            combined_legend_template += f"<li><span style='background: {color}; opacity: 0.75;'></span>CI {ci}</li>"
-
-        combined_legend_template += """
-          </ul>
-        </div>
-        </div>
-        <style type='text/css'>
-          .maplegend .legend-scale ul {margin: 0; padding: 0; color: #0f0f0f;}
-          .maplegend .legend-scale ul li {list-style: none; line-height: 18px; margin-bottom: 1.5px;}
-          .maplegend ul.legend-labels li span {float: left; height: 16px; width: 16px; margin-right: 4.5px;}
-        </style>
-        {% endmacro %}
-        """
-        combined_macro = MacroElement()
-        combined_macro._template = Template(combined_legend_template)
-        self.map.get_root().add_child(combined_macro)
-
-    def run(self):
-        col1, col2, _, _ = st.columns([1, 1, 2, 2])
-
-        with col1:
-            self.initialize_map()
-
-        with col2:
-            category = st.selectbox(
-                "Category",
-                ["CellId", "RSRP", "CellId with Spidergraph", "RSRP with Spidergraph"],
-            )
-
-        col1, col2, col3 = st.columns([3, 1, 1])
-
-        with col1:
-            self.add_geocell_layer()
-            color_by_ci = "CellId" in category
-            self.add_driveless_layer(color_by_ci=color_by_ci)
-
-            if "Spidergraph" in category:
-                self.add_spider_graph()
-
-            self.display_map()
-
-        with col2:
-            st.markdown("---")
-
-        with col3:
-            st.markdown("---")
-
-
-# if __name__ == "__main__":
-#     st.set_page_config(layout="wide")
-#     script_dir = os.path.dirname(__file__)
-#     sitelist_mcom = os.path.join(script_dir, "test_geocell.csv")
-#     sitelist_driveless = os.path.join(script_dir, "test_driveless.csv")
-
-#     app = GeoApp(sitelist_mcom, sitelist_driveless)
-#     app.run()
-
-
 class App:
     def __init__(self):
         self.config = Config().load()
@@ -1210,26 +899,7 @@ class App:
         self.dataframe_manager = DataFrameManager()
         self.streamlit_interface = StreamlitInterface()
         self.chart_generator = ChartGenerator()
-        self.temp_data_manager = TempDataManager()
-
-    st.set_page_config(layout="wide")
-    st.markdown(
-        """
-            <style>
-            [data-testid="collapsedControl"] {
-                    display: none;
-                }
-            #MainMenu, header, footer {visibility: hidden;}
-            .appview-container .main .block-container {
-                padding-top: 1px;
-                padding-left: 1rem;
-                padding-right: 1rem;
-                padding-bottom: 1rem;
-            }
-            </style>
-            """,
-        unsafe_allow_html=True,
-    )
+        self.geodata = None
 
     def run(self):
         # Create database session
@@ -1249,12 +919,15 @@ class App:
         with col1:
             # Date range selection
             date_range = self.streamlit_interface.select_date_range()
+            st.session_state["date_range"] = date_range
 
         with col2:
             selected_sites = self.streamlit_interface.site_selection(sitelist)
+            st.session_state.selected_sites = selected_sites
 
         with col3:
             selected_neids = self.streamlit_interface.neid_selection(sitelist)
+            st.session_state.selected_neids = selected_neids
 
         # Fetch data for each selected site
         if st.button("Run Query"):
@@ -1272,11 +945,7 @@ class App:
                     self.dataframe_manager.add_dataframe(
                         f"mcom_data_{siteid}", mcom_data
                     )
-                    self.dataframe_manager.display_dataframe(
-                        f"mcom_data_{siteid}", f"MCOM Data for Site: {siteid}"
-                    )
 
-                    # Fetch additional data based on mcom results
                     for _, row in mcom_data.iterrows():
                         # Get and append target data
                         target_data = self.query_manager.get_target_data(
@@ -1289,15 +958,6 @@ class App:
                         target_data["EutranCell"] = row["Cell_Name"]
                         combined_target_data.append(target_data)
 
-                        # Get and append ltemdt data
-                        # ltemdt_data = self.query_manager.get_ltemdt_data(
-                        #     row["eNBId"], row["cellId"]
-                        # )
-                        # ltemdt_data = self.query_manager.get_ltemdt_data(row["eNBId"])
-                        # ltemdt_data["EutranCell"] = row["Cell_Name"]
-                        # combined_ltemdt_data.append(ltemdt_data)
-
-                        # Get and append ltetastate data
                         ltetastate_data = self.query_manager.get_ltetastate_data(
                             row["eNBId"], row["cellId"]
                         )
@@ -1312,10 +972,6 @@ class App:
                     self.dataframe_manager.add_dataframe(
                         f"ltedaily_data_{siteid}", ltedaily_data
                     )
-                    # self.dataframe_manager.display_dataframe(
-                    #     f"ltedaily_data_{siteid}", f"LTE Daily Data for Site: {siteid}"
-                    # )
-
                 # Combine target data and display
                 if combined_target_data:
                     combined_target_df = pd.concat(
@@ -1324,24 +980,6 @@ class App:
                     self.dataframe_manager.add_dataframe(
                         "combined_target_data", combined_target_df
                     )
-                    # self.dataframe_manager.display_dataframe(
-                    #     "combined_target_data", "Combined Target Data"
-                    # )
-
-                # TAG: - Combine LTE MDT Data
-                # if combined_ltemdt_data:
-                #     combined_ltemdt_df = pd.concat(
-                #         combined_ltemdt_data, ignore_index=True
-                #     )
-                #     self.dataframe_manager.add_dataframe(
-                #         "combined_ltemdt_data", combined_ltemdt_df
-                #     )
-                #     self.dataframe_manager.display_dataframe(
-                #         "combined_ltemdt_data", "Combined LTE MDT Data"
-                #     )
-                #     self.temp_data_manager.save_data(
-                #         combined_ltemdt_df, "ltemdt_data_saved"
-                #     )
 
                 # Combine ltetastate data and display
                 if combined_ltetastate_data:
@@ -1351,9 +989,6 @@ class App:
                     self.dataframe_manager.add_dataframe(
                         "combined_ltetastate_data", combined_ltetastate_df
                     )
-                    # self.dataframe_manager.display_dataframe(
-                    #     "combined_ltetastate_data", "Combined LTE TA State Data"
-                    # )
 
                 # Combine ltedaily data and display
                 if combined_ltedaily_data:
@@ -1363,9 +998,6 @@ class App:
                     self.dataframe_manager.add_dataframe(
                         "combined_ltedaily_data", combined_ltedaily_df
                     )
-                    # self.dataframe_manager.display_dataframe(
-                    #     "combined_ltedaily_data", "LTE Daily Data"
-                    # )
 
                     # Combine target data with ltedaily data
                     combined_target_ltedaily_df = pd.merge(
@@ -1377,10 +1009,6 @@ class App:
                     self.dataframe_manager.add_dataframe(
                         "combined_target_ltedaily_data", combined_target_ltedaily_df
                     )
-                    # self.dataframe_manager.display_dataframe(
-                    #     "combined_target_ltedaily_data",
-                    #     "LTE Daily Data & Datum",
-                    # )
 
                     yaxis_ranges = [
                         [0, 105],
@@ -1491,7 +1119,6 @@ class App:
                         y_param="SAR",
                         sector_param="EutranCell",
                         y2_avg="Service Drop Rate",
-                        # yaxis_range=yaxis_ranges[4],
                         yaxis_range=None,
                     )
 
@@ -1745,9 +1372,6 @@ class App:
                 )
 
                 self.dataframe_manager.add_dataframe("ltehourly_data", ltehourly_data)
-                # self.dataframe_manager.display_dataframe(
-                #     "ltehourly_data", "LTE Hourly Data"
-                # )
 
                 # TAG: - PRB & Active User
                 st.markdown(
@@ -1806,17 +1430,47 @@ class App:
                     y_param="VSWR",
                     nename="RRU",
                 )
-                # Close session
 
+                # MARK: - GeoApp MDT Data
+                st.session_state.mcom_data = mcom_data
+                st.session_state.combined_target_data = combined_target_data
+
+                # MARK: - GeoApp MDT Data
                 ltemdtdata = self.query_manager.get_ltemdt_data(selected_sites)
                 self.dataframe_manager.add_dataframe("ltemdtdata", ltemdtdata)
-                self.dataframe_manager.display_dataframe("ltemdtdata", "LTE MDT Data")
-                self.temp_data_manager.cleanup()
+                st.session_state.ltemdtdata = ltemdtdata
+
+                self.geodata = GeoApp(mcom_data, ltemdtdata)
+                self.geodata.run_geo_app()
+
                 session.close()
-            else:
-                st.warning("Please select site IDs and date range to load data.")
+        else:
+            # If not running the query, reload the data from session state
+            if "mcom_data" in st.session_state and "ltemdtdata" in st.session_state:
+                self.geodata = GeoApp(
+                    st.session_state.mcom_data, st.session_state.ltemdtdata
+                )
+                self.geodata.run_geo_app()
 
 
 if __name__ == "__main__":
+    st.set_page_config(layout="wide")
+    st.markdown(
+        """
+            <style>
+            [data-testid="collapsedControl"] {
+                    display: none;
+                }
+            #MainMenu, header, footer {visibility: hidden;}
+            .appview-container .main .block-container {
+                padding-top: 1px;
+                padding-left: 1rem;
+                padding-right: 1rem;
+                padding-bottom: 1rem;
+            }
+            </style>
+            """,
+        unsafe_allow_html=True,
+    )
     app = App()
     app.run()
