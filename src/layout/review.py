@@ -8,6 +8,7 @@ from colors import ColorPalette
 
 # from streamlit_dynamic_filters import DynamicFilters
 from geoapp import GeoApp
+from isd import InterSiteDistance
 from omegaconf import DictConfig, OmegaConf
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
@@ -20,7 +21,7 @@ from styles import styling
 # TODO: - Need to append target to ltedaily data - create another query chart to display target data with datums DONE
 # TODO: - Need create chart area for payload parameter - DONE
 # TODO: - Need to create chart PRB and Active User - DONE
-# TODO:  CQI Overlay - DONE | Geo Plotting
+# TODO: - Geo Plotting - DONE
 
 
 class Config:
@@ -95,6 +96,14 @@ class StreamlitInterface:
         )
         return date_range
 
+    def select_xrule_date(self):
+        if "xrule_date" not in st.session_state:
+            st.session_state["xrule_date"] = pd.Timestamp.today()
+
+        xrule_date = st.date_input("OA Date", st.session_state["xrule_date"])
+        st.session_state["xrule_date"] = xrule_date  # Ensure session state is updated
+        return xrule_date
+
 
 class QueryManager:
     def __init__(self, engine):
@@ -118,6 +127,15 @@ class QueryManager:
         """
         )
         return self.fetch_data(query, {"siteid": siteid})
+
+    def get_mcom_neid(self):
+        query = text(
+            """
+            SELECT "NE_ID", "Cell_Name", "Longitude", "Latitude", "Dir"
+            FROM mcom
+        """
+        )
+        return self.fetch_data(query)
 
     def get_ltedaily_data(self, siteid, neids, start_date, end_date):
         query = text(
@@ -217,7 +235,6 @@ class QueryManager:
             {"city": city, "mc_class": mc_class, "band": band},
         )
 
-    # def get_ltemdt_data(self, enodebid, ci):
     def get_ltemdt_data(self, selected_sites):
         like_conditions = " OR ".join(
             [f'"site" LIKE :site_{i}' for i in range(len(selected_sites))]
@@ -240,16 +257,6 @@ class QueryManager:
         )
         params = {f"site_{i}": f"%{site}%" for i, site in enumerate(selected_sites)}
         return self.fetch_data(query, params=params)
-
-    # def get_ltemdt_data(self, enodebid):
-    #     query = text(
-    #         """
-    #     SELECT *
-    #     FROM ltemdt
-    #     WHERE enodebid = :enodebid
-    #     """
-    #     )
-    #     return self.fetch_data(query, {"enodebid": enodebid})
 
     def get_ltetastate_data(self, enodebid, ci):
         query = text(
@@ -323,9 +330,17 @@ class ChartGenerator:
         last_char = cell[-1].upper()
         return sector_mapping.get(last_char, 0)
 
-    # TAG: - Create Charts  Line
+    # TAG: - create_charts
     def create_charts(
-        self, df, param, site, x_param, y_param, sector_param, yaxis_range=None
+        self,
+        df,
+        param,
+        site,
+        x_param,
+        y_param,
+        sector_param,
+        yaxis_range=None,
+        xrule=None,
     ):
         sectors = sorted(df[sector_param].apply(self.determine_sector).unique())
         color_mapping = {
@@ -366,6 +381,18 @@ class ChartGenerator:
                 )
                 .properties(title=f"Sector {sector}", width=590, height=150)
             )
+
+            # Add xrule to the chart if provided
+            if xrule:
+                xrule_chart = (
+                    alt.Chart(
+                        pd.DataFrame({"On Air Date": [st.session_state["xrule_date"]]})
+                    )
+                    .mark_rule(color="#F7BB00", strokeWidth=4, strokeDash=[10, 5])
+                    .encode(x="On Air Date:T")
+                )
+                sector_chart += xrule_chart
+
             charts.append(sector_chart)
 
         combined_chart = (
@@ -385,7 +412,6 @@ class ChartGenerator:
                 padding=10,
                 titlePadding=10,
                 cornerRadius=10,
-                # strokeColor="#9A9A9A",
                 columns=6,
                 titleAnchor="start",
                 direction="vertical",
@@ -411,7 +437,7 @@ class ChartGenerator:
             with container:
                 st.altair_chart(combined_chart, use_container_width=True)
 
-    # TAG: - Create Charts Line with Datums
+    # TAG: - create_charts_datums
     def create_charts_datums(
         self,
         df,
@@ -423,6 +449,7 @@ class ChartGenerator:
         y2_avg,
         yaxis_range=None,
         yaxis_reverse=False,
+        xrule=None,
     ):
         sectors = sorted(df[sector_param].apply(self.determine_sector).unique())
 
@@ -454,7 +481,6 @@ class ChartGenerator:
                     y=alt.Y(
                         y_param,
                         type="quantitative",
-                        # scale=alt.Scale(domain=yaxis_range),
                         scale=y_scale,
                         axis=alt.Axis(title=y_param),
                     ),
@@ -473,10 +499,20 @@ class ChartGenerator:
             if y2_avg in sector_df.columns:
                 y2_avg_line = (
                     alt.Chart(sector_df)
-                    .mark_rule(color="red", strokeDash=[10, 5], size=3, opacity=0.1)
+                    .mark_rule(color="#F74B00", strokeDash=[10, 5], size=4, opacity=0.1)
                     .encode(y=alt.Y(y2_avg, type="quantitative", title="with Baseline"))
                 )
                 sector_chart = alt.layer(y2_avg_line, sector_chart)
+
+            if xrule:
+                xrule_chart = (
+                    alt.Chart(
+                        pd.DataFrame({"On Air Date": [st.session_state["xrule_date"]]})
+                    )
+                    .mark_rule(color="#F7BB00", strokeWidth=4, strokeDash=[10, 5])
+                    .encode(x="On Air Date:T")
+                )
+                sector_chart += xrule_chart
 
             charts.append(sector_chart)
 
@@ -523,9 +559,17 @@ class ChartGenerator:
             with container:
                 st.altair_chart(combined_chart, use_container_width=True)
 
-    # TAG: - Create Charts Stacked Area
+    # TAG: - create_charts_area
     def create_charts_area(
-        self, df, param, site, x_param, y_param, sector_param, yaxis_range=None
+        self,
+        df,
+        param,
+        site,
+        x_param,
+        y_param,
+        sector_param,
+        yaxis_range=None,
+        xrule=None,
     ):
         sectors = sorted(df[sector_param].apply(self.determine_sector).unique())
 
@@ -569,6 +613,17 @@ class ChartGenerator:
                 )
                 .properties(title=f"Sector {sector}", width=600, height=150)
             )
+            # charts.append(sector_chart)
+
+            if xrule:
+                xrule_chart = (
+                    alt.Chart(
+                        pd.DataFrame({"On Air Date": [st.session_state["xrule_date"]]})
+                    )
+                    .mark_rule(color="#F7BB00", strokeWidth=4, strokeDash=[10, 5])
+                    .encode(x="On Air Date:T")
+                )
+            sector_chart += xrule_chart
             charts.append(sector_chart)
 
         combined_chart = (
@@ -614,10 +669,9 @@ class ChartGenerator:
             with container:
                 st.altair_chart(combined_chart, use_container_width=True)
 
-    # TAG: - Create Charts based on Frequency
-    # APPLY
+    # TAG: - create_charts_neid
     def create_charts_neid(
-        self, df, param, site, x_param, y_param, neid, yaxis_range=None
+        self, df, param, site, x_param, y_param, neid, yaxis_range=None, xrule=None
     ):
         # Group by x_param and sum y_param values for each NEID
         grouped_df = df.groupby([x_param, neid])[y_param].sum().reset_index()
@@ -636,7 +690,7 @@ class ChartGenerator:
         else:
             y_scale = alt.Scale()
 
-        chart = (
+        base_chart = (
             alt.Chart(grouped_df)
             .mark_area()
             .encode(
@@ -656,7 +710,22 @@ class ChartGenerator:
                     ),
                 ),
             )
-            .properties(
+        )
+
+        if xrule:
+            xrule_chart = (
+                alt.Chart(
+                    pd.DataFrame({"On Air Date": [st.session_state["xrule_date"]]})
+                )
+                .mark_rule(color="#F7BB00", strokeWidth=4, strokeDash=[10, 5])
+                .encode(x="On Air Date:T")
+            )
+            chart = alt.layer(base_chart, xrule_chart)
+        else:
+            chart = base_chart
+
+        chart = (
+            chart.properties(
                 title="Payload Gbps",
                 height=350,
                 background="#F5F5F5",
@@ -676,7 +745,6 @@ class ChartGenerator:
                 padding=10,
                 titlePadding=10,
                 cornerRadius=10,
-                # strokeColor="#9A9A9A",
                 columns=6,
                 titleAnchor="start",
                 direction="vertical",
@@ -783,7 +851,7 @@ class ChartGenerator:
             with container:
                 st.altair_chart(combined_chart, use_container_width=True)
 
-    # TAG: - Create Charts for VSWR
+    # TAG: - create_charts_vswr
     def create_charts_vswr(self, df, x1_param, x2_param, y_param, nename):
         # Define color mapping
         color_mapping = {
@@ -798,26 +866,31 @@ class ChartGenerator:
         baseline_value = 1.3
         baseline = (
             alt.Chart(pd.DataFrame({"baseline": [baseline_value]}))
-            .mark_rule(color="red", strokeDash=[8, 4], strokeWidth=5)
+            .mark_rule(color="#F74B00", strokeDash=[8, 4], strokeWidth=4)
             .encode(y="baseline:Q")
         )
 
         # Create main chart
         bars = (
             alt.Chart(df)
-            .mark_bar(size=10)  # Adjust bar width
+            .mark_bar(size=10)  # Increased bar width
             .encode(
                 x=alt.X(
                     x1_param,
                     type="ordinal",
-                    axis=alt.Axis(title="", labels=False),  # Hide x-axis labels
-                    scale=alt.Scale(type="point", padding=0.1),
-                ),  # Adjust padding between bars
+                    axis=alt.Axis(title="", labels=False),  # Show x-axis labels
+                    sort=alt.SortField(
+                        field=x1_param, order="ascending"
+                    ),  # Sort bars from left to right
+                    scale=alt.Scale(
+                        type="point", padding=0.1
+                    ),  # Adjust padding between bars
+                ),
                 y=alt.Y(
                     y_param,
                     type="quantitative",
                     axis=alt.Axis(title=y_param),
-                    stack="zero",
+                    stack=None,  # Remove stacking to create unstacked bars
                 ),
                 color=alt.Color(
                     x2_param,
@@ -825,9 +898,11 @@ class ChartGenerator:
                         domain=list(color_mapping.keys()),
                         range=list(color_mapping.values()),
                     ),
+                    legend=alt.Legend(title=x2_param),
                 ),
                 tooltip=[x1_param, x2_param, y_param],
             )
+            .properties(width=300, height=150)
         )
 
         # Create highlight chart for values above the baseline
@@ -841,10 +916,12 @@ class ChartGenerator:
         # Configure facet, scale, and view
         chart_with_facet_and_scale = (
             base_chart.facet(
-                column=alt.Facet("nename", type="nominal", title=""),
+                column=alt.Facet(nename, type="nominal", title=""),
                 spacing=0,  # Remove spacing between facets
             )
-            .resolve_scale(x="shared")  # Share x-axis scale across facets
+            .resolve_scale(
+                x="independent"
+            )  # Use independent x-axis scale for each facet
             .configure_view(strokeWidth=0)
         )
 
@@ -873,22 +950,9 @@ class ChartGenerator:
             )
         )
 
-        chart = configured_chart
-        with stylable_container(
-            key="container_with_border",
-            css_styles="""
-                {
-                    background-color: #F5F5F5;
-                    border: 2px solid rgba(49, 51, 63, 0.2);
-                    border-radius: 0.5rem;
-                    padding: calc(1em - 1px)
-                }
-                """,
-        ):
-            col1, _ = st.columns([1.5, 1])
-            con1 = col1.container()
-            with con1:
-                st.altair_chart(chart, use_container_width=True)
+        container = st.container()
+        with container:
+            st.altair_chart(configured_chart, use_container_width=True)
 
 
 class App:
@@ -915,9 +979,8 @@ class App:
         sitelist = self.streamlit_interface.load_sitelist(sitelist_path)
 
         # Site selection
-        col1, col2, col3 = st.columns([1, 1, 1])
+        col1, col2, col3, col4, _ = st.columns([1, 1, 1, 1, 3])
         with col1:
-            # Date range selection
             date_range = self.streamlit_interface.select_date_range()
             st.session_state["date_range"] = date_range
 
@@ -929,10 +992,16 @@ class App:
             selected_neids = self.streamlit_interface.neid_selection(sitelist)
             st.session_state.selected_neids = selected_neids
 
+        with col4:
+            xrule = self.streamlit_interface.select_xrule_date()
+            st.session_state["xrule"] = xrule
+
         # Fetch data for each selected site
         if st.button("Run Query"):
             if selected_sites and date_range:
                 start_date, end_date = date_range
+                # st.write(xrule)
+                # st.write(start_date, end_date)
 
                 combined_target_data = []
                 # combined_ltemdt_data = []
@@ -941,6 +1010,55 @@ class App:
 
                 # Fetch MCOM data
                 for siteid in selected_sites:
+                    site_path = os.path.join(script_dir, "sites", siteid)
+                    col1, col2 = st.columns([2, 1])
+
+                    # TAG: NAURA and ALARM
+                    with col1:
+                        st.markdown(
+                            *styling(
+                                f"📝 Naura Site {siteid}",
+                                font_size=24,
+                                text_align="left",
+                                tag="h6",
+                            )
+                        )
+
+                    with col2:
+                        st.markdown(
+                            *styling(
+                                f"⚠️ Alarm Site {siteid}",
+                                font_size=24,
+                                text_align="left",
+                                tag="h6",
+                            )
+                        )
+
+                    col1, col2 = st.columns([2, 1])
+                    con1 = col1.container(border=True)
+                    con2 = col2.container(border=True)
+
+                    with con1:
+                        if os.path.exists(site_path):
+                            naura = os.path.join(site_path, "naura.jpg")
+                            if os.path.exists(naura):
+                                st.image(naura, caption=None, use_column_width=True)
+                            else:
+                                st.write(f"Please upload the image: {naura}")
+                        else:
+                            st.write(f"Path does not exist: {site_path}")
+
+                    with con2:
+                        if os.path.exists(site_path):
+                            alarm = os.path.join(site_path, "alarm.jpg")
+
+                            if os.path.exists(alarm):
+                                st.image(alarm, caption=None, use_column_width=True)
+                            else:
+                                st.write(f"Please upload the image: {alarm}")
+                        else:
+                            st.write(f"Path does not exist: {site_path}")
+
                     mcom_data = self.query_manager.get_mcom_data(siteid)
                     self.dataframe_manager.add_dataframe(
                         f"mcom_data_{siteid}", mcom_data
@@ -972,6 +1090,7 @@ class App:
                     self.dataframe_manager.add_dataframe(
                         f"ltedaily_data_{siteid}", ltedaily_data
                     )
+
                 # Combine target data and display
                 if combined_target_data:
                     combined_target_df = pd.concat(
@@ -1036,6 +1155,7 @@ class App:
                         y_param="Availability",
                         sector_param="EutranCell",
                         yaxis_range=yaxis_ranges[0],
+                        xrule=True,  # Set this to False if you don't want the xrule
                     )
 
                     # TAG: - RRC Setup Success Rate
@@ -1057,6 +1177,7 @@ class App:
                         sector_param="EutranCell",
                         y2_avg="CSSR",
                         yaxis_range=yaxis_ranges[0],
+                        xrule=True,
                     )
 
                     # TAG: - ERAB SR
@@ -1078,6 +1199,7 @@ class App:
                         sector_param="EutranCell",
                         y2_avg="CSSR",
                         yaxis_range=yaxis_ranges[0],
+                        xrule=True,
                     )
 
                     # TAG: - SSSR
@@ -1099,6 +1221,7 @@ class App:
                         sector_param="EutranCell",
                         y2_avg="CSSR",
                         yaxis_range=yaxis_ranges[0],
+                        xrule=True,
                     )
 
                     # TAG: - CSSR
@@ -1120,6 +1243,7 @@ class App:
                         sector_param="EutranCell",
                         y2_avg="Service Drop Rate",
                         yaxis_range=None,
+                        xrule=True,
                     )
 
                     # TAG: - CQI Non HOM
@@ -1141,6 +1265,7 @@ class App:
                         sector_param="EutranCell",
                         y2_avg="CQI",
                         yaxis_range=yaxis_ranges[4],
+                        xrule=True,
                     )
 
                     # TAG: - Spectral Efficiency
@@ -1162,6 +1287,7 @@ class App:
                         sector_param="EutranCell",
                         y2_avg="SE",
                         yaxis_range=None,
+                        xrule=True,
                     )
 
                     # TAG: - Intra HO SR
@@ -1183,6 +1309,7 @@ class App:
                         sector_param="EutranCell",
                         y2_avg="Intra Freq HOSR",
                         yaxis_range=yaxis_ranges[0],
+                        xrule=True,
                     )
 
                     # TAG: - Inter HO SR
@@ -1204,6 +1331,7 @@ class App:
                         sector_param="EutranCell",
                         y2_avg="Inter Freq HOSR",
                         yaxis_range=yaxis_ranges[0],
+                        xrule=True,
                     )
 
                     # TAG: - UL RSSI
@@ -1226,6 +1354,7 @@ class App:
                         y2_avg="UL_INT_PUSCH_x",
                         yaxis_range=yaxis_ranges[2],
                         yaxis_reverse=True,
+                        xrule=True,
                     )
 
                     # TAG: - Throughput Mpbs
@@ -1246,6 +1375,7 @@ class App:
                         y_param="CellDownlinkAverageThroughput",
                         sector_param="EutranCell",
                         yaxis_range=None,
+                        xrule=True,
                     )
 
                     # TAG: - Payload Sector
@@ -1266,6 +1396,7 @@ class App:
                         y_param="Payload_Total(Gb)",
                         sector_param="EutranCell",
                         yaxis_range=None,
+                        xrule=True,
                     )
 
                 payload_data = self.query_manager.get_ltedaily_payload(
@@ -1317,6 +1448,7 @@ class App:
                             y_param="Payload_Total(Gb)",
                             neid="NEID",
                             yaxis_range=None,
+                            xrule=True,
                         )
 
                 with con2:
@@ -1339,6 +1471,7 @@ class App:
                             y_param="Payload_Total(Gb)",
                             neid="SITEID",
                             yaxis_range=None,
+                            xrule=True,
                         )
 
                 st.markdown(
@@ -1414,22 +1547,59 @@ class App:
                 self.dataframe_manager.add_dataframe("vswr_data", vswr_data)
                 # self.dataframe_manager.display_dataframe("vswr_data", "VSWR Data")
                 # TAG: - VSWR
-
-                st.markdown(
-                    *styling(
-                        f"📶 VSWR Analysis for Site {siteid} (dBm)",
-                        font_size=24,
-                        text_align="left",
-                        tag="h6",
+                col1, col2 = st.columns([2, 1])
+                with col1:
+                    st.markdown(
+                        *styling(
+                            f"📶 VSWR Analysis for Site {siteid} (dBm)",
+                            font_size=24,
+                            text_align="left",
+                            tag="h6",
+                        )
                     )
-                )
-                self.chart_generator.create_charts_vswr(
-                    df=vswr_data,
-                    x1_param="DATE_ID",
-                    x2_param="RRU",
-                    y_param="VSWR",
-                    nename="RRU",
-                )
+
+                with col2:
+                    st.markdown(
+                        *styling(
+                            f"📶 RET After {siteid}",
+                            font_size=24,
+                            text_align="left",
+                            tag="h6",
+                        )
+                    )
+
+                col1, col2 = st.columns([2, 1])
+                con1 = col1.container()
+                con2 = col1.container()
+                with con1:
+                    with stylable_container(
+                        key="container_with_border",
+                        css_styles="""
+                        {
+                            background-color: #F5F5F5;
+                            border: 2px solid rgba(49, 51, 63, 0.2);
+                            border-radius: 0.5rem;
+                            padding: calc(1em - 1px)
+                        }
+                        """,
+                    ):
+                        self.chart_generator.create_charts_vswr(
+                            df=vswr_data,
+                            x1_param="DATE_ID",
+                            x2_param="RRU",
+                            y_param="VSWR",
+                            nename="RRU",
+                        )
+
+                with con2:
+                    if os.path.exists(site_path):
+                        vswr = os.path.join(site_path, "vswr.jpg")
+                        if os.path.exists(vswr):
+                            st.image(vswr, caption=None, use_column_width=True)
+                        else:
+                            st.write(f"Please upload the image: {vswr}")
+                    else:
+                        st.write(f"Path does not exist: {site_path}")
 
                 # MARK: - GeoApp MDT Data
                 st.session_state.mcom_data = mcom_data
@@ -1439,9 +1609,40 @@ class App:
                 ltemdtdata = self.query_manager.get_ltemdt_data(selected_sites)
                 self.dataframe_manager.add_dataframe("ltemdtdata", ltemdtdata)
                 st.session_state.ltemdtdata = ltemdtdata
-
+                st.markdown(
+                    *styling(
+                        f"☢️ MDT and TA Summary for Site {siteid}",
+                        font_size=24,
+                        text_align="left",
+                        tag="h6",
+                    )
+                )
                 self.geodata = GeoApp(mcom_data, ltemdtdata)
                 self.geodata.run_geo_app()
+
+                # MARK: - MCOM ISD Data
+                for neid in selected_neids:
+                    st.write(neid)
+                    mcom_isd = self.query_manager.get_mcom_neid()
+
+                    # Filter mcom_isd data for the specific NE_ID
+                    filtered_data = mcom_isd[mcom_isd["NE_ID"] == neid]
+
+                    if not filtered_data.empty:
+                        isd_calculator = InterSiteDistance(neid, filtered_data)
+                        isd_results = isd_calculator.calculate_all_isd()
+
+                        # Merge ISD results with the filtered data
+                        final_data = pd.merge(
+                            filtered_data, isd_results, on="Cell_Name", how="left"
+                        )
+
+                        self.dataframe_manager.add_dataframe(
+                            f"mcom_isd_{neid}", final_data
+                        )
+                        self.dataframe_manager.display_dataframe(
+                            f"mcom_isd_{neid}", f"MCOM ISD Data for {neid}"
+                        )
 
                 session.close()
         else:

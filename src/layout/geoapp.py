@@ -32,25 +32,24 @@ class GeoApp:
             "Google Hybrid": "https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
         }
 
-    st.cache_data()
-
-    def initialize_map(_self):
+    # @st.cache_data
+    def initialize_map(self):
         """Initialize the map with a selected tile provider."""
         if "tile_provider" not in st.session_state:
-            st.session_state.tile_provider = list(_self.tile_options.keys())[1]
+            st.session_state.tile_provider = list(self.tile_options.keys())[1]
         tile_provider = st.selectbox(
-            "Select Map",
-            list(_self.tile_options.keys()),
-            index=list(_self.tile_options.keys()).index(st.session_state.tile_provider),
+            "Map",
+            list(self.tile_options.keys()),
+            index=list(self.tile_options.keys()).index(st.session_state.tile_provider),
             key="tile_provider_select",
         )
         if st.session_state.tile_provider != tile_provider:
             st.session_state.tile_provider = tile_provider
-            st.rerun()
-        _self.map = folium.Map(
-            location=_self.map_center,
+            # st.rerun()
+        self.map = folium.Map(
+            location=self.map_center,
             zoom_start=15,
-            tiles=_self.tile_options[tile_provider],
+            tiles=self.tile_options[tile_provider],
             attr=tile_provider,
         )
 
@@ -97,10 +96,15 @@ class GeoApp:
     def add_geocell_layer(self):
         geocell_layer = folium.FeatureGroup(name="Geocell Sites")
 
+        polygons = []
         for _, row in self.geocell_data.iterrows():
             color = self.get_ci_color(row["cellId"])
             self.add_circle_marker(row, color, geocell_layer)
             self.add_custom_marker(row, geocell_layer)
+            polygons.append((row, color))
+
+        # Add polygons after markers to prevent them from being sealed by circles
+        for row, color in polygons:
             self.add_sector_polygon(row, color, geocell_layer)
 
         geocell_layer.add_to(self.map)
@@ -113,6 +117,22 @@ class GeoApp:
             <b>CI:</b> {row['cellId']}
         </div>
         """
+
+    def add_sector_polygon(self, row, color, layer):
+        sector_polygon = self.create_sector_polygon(
+            row["Latitude"],
+            row["Longitude"],
+            row["Dir"],
+            row["Ant_BW"],
+            row["Ant_Size"],
+        )
+        folium.Polygon(
+            locations=sector_polygon,
+            color="black",
+            fill=True,
+            fill_color=color,
+            fill_opacity=1.0,
+        ).add_to(layer)
 
     def add_circle_marker(self, row, color, layer):
         popup_content = self.create_popup_content(row)
@@ -133,22 +153,6 @@ class GeoApp:
             icon=folium.DivIcon(
                 html=f'<div style="font-size: 24pt; color: red">{row["Site_ID"]}</div>'
             ),
-        ).add_to(layer)
-
-    def add_sector_polygon(self, row, color, layer):
-        sector_polygon = self.create_sector_polygon(
-            row["Latitude"],
-            row["Longitude"],
-            row["Dir"],
-            row["Ant_BW"],
-            row["Ant_Size"],
-        )
-        folium.Polygon(
-            locations=sector_polygon,
-            color="black",
-            fill=True,
-            fill_color=color,
-            fill_opacity=1.0,
         ).add_to(layer)
 
     def add_driveless_layer(self, color_by_ci=True):
@@ -243,13 +247,12 @@ class GeoApp:
         combined_macro._template = Template(combined_legend_template)
         self.map.get_root().add_child(combined_macro)
 
-    st.cache_data()
-
-    def run_geo_app(_self):
+    # @st.cache_data
+    def run_geo_app(self):
         col1, col2, _, _ = st.columns([1, 1, 2, 2])
 
         with col1:
-            _self.initialize_map()
+            self.initialize_map()
 
         with col2:
             if "category" not in st.session_state:
@@ -267,22 +270,22 @@ class GeoApp:
             )
             if st.session_state.category != category:
                 st.session_state.category = category
-                st.rerun()
+                # st.rerun()
 
         col1, col2, col3 = st.columns([3, 1, 1])
 
         with col1:
-            _self.add_geocell_layer()
+            self.add_geocell_layer()
             color_by_ci = "CellId" in category
-            _self.add_driveless_layer(color_by_ci=color_by_ci)
+            self.add_driveless_layer(color_by_ci=color_by_ci)
 
             if "Spidergraph" in category:
-                _self.add_spider_graph()
+                self.add_spider_graph()
 
-            _self.display_map()
+            self.display_map()
 
         with col2:
-            st.markdown("---")
+            st.markdown("📡 --- 📡")
 
         with col3:
-            st.markdown("---")
+            st.markdown("📡 --- 📡")
