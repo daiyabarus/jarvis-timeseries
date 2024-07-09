@@ -22,10 +22,29 @@ class InterSiteDistance:
         distance = self.earth_radius * c
         return round(distance, 2)
 
+    def calculate_bearing(self, lat1, lon1, lat2, lon2):
+        bearing = atan2(
+            sin(lon2 - lon1) * cos(lat2),
+            cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(lon2 - lon1),
+        )
+        return (bearing * 180 / pi + 360) % 360
+
     def is_within_beamwidth(self, dir1, dir2):
         beam_diff = abs(dir1 - dir2) % 360
         min_diff = min(beam_diff, 360 - beam_diff)
         return min_diff <= self.beamwidth
+
+    def calculate_remark(self, bearing, dir_source, beam_source):
+        max_beam_source = (dir_source + beam_source) % 360
+        min_beam_source = (dir_source - beam_source + 360) % 360
+
+        in_direction = (
+            min_beam_source <= bearing <= max_beam_source
+            or (bearing + 360 if bearing < min_beam_source else bearing)
+            <= max_beam_source
+        )
+
+        return "Indirection" if in_direction else "NotIndirection"
 
     def find_nearest_neighbors(self, cell_name):
         site_data = self.data[self.data["Cell_Name"] == cell_name].iloc[0]
@@ -35,23 +54,28 @@ class InterSiteDistance:
             site_data["Dir"],
         )
 
-        neighbors = [
-            (
-                self.calculate_distance(lat1, lon1, row["Latitude"], row["Longitude"]),
-                row["Cell_Name"],
-            )
-            for _, row in self.data.iterrows()
-            if row["Cell_Name"] != cell_name
-            and self.is_within_beamwidth(dir1, row["Dir"])
-        ]
-        neighbors = [n for n in neighbors if n[0] > 0]
+        neighbors = []
+        for _, row in self.data.iterrows():
+            if row["Cell_Name"] == cell_name:
+                continue
+
+            lat2, lon2, dir2 = row["Latitude"], row["Longitude"], row["Dir"]
+            distance = self.calculate_distance(lat1, lon1, lat2, lon2)
+            if distance == 0 or not self.is_within_beamwidth(dir1, dir2):
+                continue
+
+            bearing = self.calculate_bearing(lat1, lon1, lat2, lon2)
+            remark = self.calculate_remark(bearing, dir1, self.beamwidth)
+            if remark == "Indirection":
+                neighbors.append((distance, row["Cell_Name"]))
+
         return sorted(neighbors)[:3]
 
     def calculate_isd(self, cell_name):
         neighbors = self.find_nearest_neighbors(cell_name)
-        if len(neighbors) < 3:
+        if len(neighbors) < 2:
             return None
-        distances = [dist for dist, _ in neighbors[:3]]
+        distances = [dist for dist, _ in neighbors[:2]]
         return round(sum(distances) / len(distances), 2)
 
     def calculate_all_isd(self, site_id):
@@ -82,19 +106,22 @@ class InterSiteDistance:
                     else [None]
                 )
 
-                if (
-                    site_id_values.size == 0
-                    or ne_id_values.size == 0
-                    or enbid_values.size == 0
-                    or ci_values.size == 0
+                if not all(
+                    [
+                        site_id_values.size,
+                        ne_id_values.size,
+                        enbid_values.size,
+                        ci_values.size,
+                    ]
                 ):
                     continue
 
-                site_id = site_id_values[0]
-                ne_id = ne_id_values[0]
-                enbid = enbid_values[0]
-                ci = ci_values[0]
-
+                site_id, ne_id, enbid, ci = (
+                    site_id_values[0],
+                    ne_id_values[0],
+                    enbid_values[0],
+                    ci_values[0],
+                )
                 isd_data.append(
                     {
                         "siteid": site_id,
@@ -113,7 +140,7 @@ class NeighborSectors:
     def __init__(self, data):
         self.data = data
         self.beamwidth = 60
-        self.max_distance = 5  # in kilometers
+        self.max_distance = 15  # in kilometers
         self.min_distance = 0  # minimum distance in kilometers
 
     def calculate_distance(self, lat1, lon1, lat2, lon2):
@@ -126,29 +153,19 @@ class NeighborSectors:
         return distance
 
     def calculate_bearing(self, lat1, lon1, lat2, lon2):
-        lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
         bearing = atan2(
             sin(lon2 - lon1) * cos(lat2),
             cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(lon2 - lon1),
         )
-        bearing = (bearing * 180 / pi + 360) % 360
-        return bearing
+        return (bearing * 180 / pi + 360) % 360
 
     def calculate_remark(
         self, bearing, dir_source, beam_source, dir_target, beam_target
     ):
         max_beam_source = (dir_source + beam_source) % 360
-        min_beam_source = (
-            (dir_source - beam_source) % 360
-            if (dir_source - beam_source) >= 0
-            else (dir_source - beam_source + 360)
-        )
+        min_beam_source = (dir_source - beam_source + 360) % 360
         max_beam_target = (dir_target + beam_target) % 360
-        min_beam_target = (
-            (dir_target - beam_target) % 360
-            if (dir_target - beam_target) >= 0
-            else (dir_target - beam_target + 360)
-        )
+        min_beam_target = (dir_target - beam_target + 360) % 360
 
         in_direction_source = (
             min_beam_source <= bearing <= max_beam_source
@@ -162,13 +179,13 @@ class NeighborSectors:
         )
 
         if in_direction_source and in_direction_target:
-            return "Direction Source"
+            return "head_to_head"
         elif in_direction_source:
-            return "Head to Head"
+            return "indirection_source"
         elif in_direction_target:
-            return "Direction Target"
+            return "indirection_target"
         else:
-            return "Indirection"
+            return "nondirectional"
 
     def find_neighbor_sectors(self, neid):
         filtered_data = self.data[self.data["NE_ID"] == neid]
@@ -219,19 +236,20 @@ class NeighborSectors:
                     target_beam,
                 )
 
-                neighbors.append(
-                    {
-                        "siteid": source_row["Site_ID"],
-                        "neid": source_row["NE_ID"],
-                        "cellname": source_row["Cell_Name"],
-                        "adjneid": target_row["NE_ID"],
-                        "adjcellname": target_row["Cell_Name"],
-                        "distance": round(distance, 2),
-                        "bearing_from_source": round(bearing_from_source, 2),
-                        "bearing_from_target": round(bearing_from_target, 2),
-                        "remark": remark,
-                    }
-                )
+                if remark == "Head to Head":
+                    neighbors.append(
+                        {
+                            "siteid": source_row["Site_ID"],
+                            "neid": source_row["NE_ID"],
+                            "cellname": source_row["Cell_Name"],
+                            "adjneid": target_row["NE_ID"],
+                            "adjcellname": target_row["Cell_Name"],
+                            "distance": round(distance, 2),
+                            "bearing_from_source": round(bearing_from_source, 2),
+                            "bearing_from_target": round(bearing_from_target, 2),
+                            "remark": remark,
+                        }
+                    )
 
                 seen_pairs.add(pair)
 
@@ -242,16 +260,14 @@ def save_results(df, site_id, filename):
     current_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(os.path.dirname(current_dir))
     folder = os.path.join(project_root, "sites", site_id)
-    if not os.path.exists(folder):
-        os.makedirs(folder)
+    os.makedirs(folder, exist_ok=True)
     file_path = os.path.join(folder, filename)
     df.to_csv(file_path, index=False)
 
 
 def process_uploaded_file(uploaded_file):
     try:
-        data = pd.read_csv(uploaded_file)
-        return data
+        return pd.read_csv(uploaded_file)
     except Exception as e:
         st.error(f"Error reading the file: {e}")
         return None
@@ -280,7 +296,7 @@ def main():
 
         headers = list(data.columns)
         st.subheader("Select Headers")
-        site_id_header = st.selectbox("Site_ID", headers, index=0)
+        site_id_header = st.selectbox("SITEID", headers, index=0)
         ne_id_header = st.selectbox("NEID", headers, index=1)
         cell_name_header = st.selectbox("CELLNAME", headers, index=2)
         longitude_header = st.selectbox("Longitude", headers, index=3)
@@ -316,17 +332,13 @@ def main():
                 st.dataframe(combined_isd_df)
 
                 filename = "isd.csv"
-
-                if "siteid" in combined_isd_df.columns:
-                    for site_id in combined_isd_df["siteid"].unique():
-                        save_results(
-                            combined_isd_df[combined_isd_df["siteid"] == site_id],
-                            site_id,
-                            filename,
-                        )
-                    st.success(f"Files saved in 'sites/{site_id}/' directories.")
-                else:
-                    st.error("Column 'siteid' not found in ISD results.")
+                for site_id in combined_isd_df["siteid"].unique():
+                    save_results(
+                        combined_isd_df[combined_isd_df["siteid"] == site_id],
+                        site_id,
+                        filename,
+                    )
+                st.success("Files saved in 'sites' directories.")
 
         if st.button("Find Neighbor Sectors"):
             neighbor_calculator = NeighborSectors(data)
@@ -342,19 +354,13 @@ def main():
                 st.dataframe(combined_neighbor_df)
 
                 filename = "tier.csv"
-
-                if "siteid" in combined_neighbor_df.columns:
-                    for site_id in combined_neighbor_df["siteid"].unique():
-                        save_results(
-                            combined_neighbor_df[
-                                combined_neighbor_df["siteid"] == site_id
-                            ],
-                            site_id,
-                            filename,
-                        )
-                    st.success("Neighbor sectors saved to 'tier.csv'.")
-                else:
-                    st.error("Column 'siteid' not found in Neighbor Sectors results.")
+                for site_id in combined_neighbor_df["siteid"].unique():
+                    save_results(
+                        combined_neighbor_df[combined_neighbor_df["siteid"] == site_id],
+                        site_id,
+                        filename,
+                    )
+                st.success("Neighbor sectors saved to 'tier.csv'.")
 
 
 if __name__ == "__main__":
