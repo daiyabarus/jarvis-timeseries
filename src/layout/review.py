@@ -8,7 +8,6 @@ from colors import ColorPalette
 
 # from streamlit_dynamic_filters import DynamicFilters
 from geoapp import GeoApp
-from isd import InterSiteDistance
 from omegaconf import DictConfig, OmegaConf
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
@@ -1000,11 +999,7 @@ class App:
         if st.button("Run Query"):
             if selected_sites and date_range:
                 start_date, end_date = date_range
-                # st.write(xrule)
-                # st.write(start_date, end_date)
-
                 combined_target_data = []
-                # combined_ltemdt_data = []
                 combined_ltetastate_data = []
                 combined_ltedaily_data = []
 
@@ -1065,7 +1060,6 @@ class App:
                     )
 
                     for _, row in mcom_data.iterrows():
-                        # Get and append target data
                         target_data = self.query_manager.get_target_data(
                             row["KABUPATEN"],
                             row["MC_class"],
@@ -1545,7 +1539,6 @@ class App:
                 # Fetch VSWR data
                 vswr_data = self.query_manager.get_vswr_data(selected_sites, end_date)
                 self.dataframe_manager.add_dataframe("vswr_data", vswr_data)
-                # self.dataframe_manager.display_dataframe("vswr_data", "VSWR Data")
                 # TAG: - VSWR
                 col1, col2 = st.columns([2, 1])
                 with col1:
@@ -1621,29 +1614,6 @@ class App:
                 self.geodata.run_geo_app()
 
                 # MARK: - MCOM ISD Data
-                for neid in selected_neids:
-                    st.write(neid)
-                    mcom_isd = self.query_manager.get_mcom_neid()
-
-                    # Filter mcom_isd data for the specific NE_ID
-                    filtered_data = mcom_isd[mcom_isd["NE_ID"] == neid]
-
-                    if not filtered_data.empty:
-                        isd_calculator = InterSiteDistance(neid, filtered_data)
-                        isd_results = isd_calculator.calculate_all_isd()
-
-                        # Merge ISD results with the filtered data
-                        final_data = pd.merge(
-                            filtered_data, isd_results, on="Cell_Name", how="left"
-                        )
-
-                        self.dataframe_manager.add_dataframe(
-                            f"mcom_isd_{neid}", final_data
-                        )
-                        self.dataframe_manager.display_dataframe(
-                            f"mcom_isd_{neid}", f"MCOM ISD Data for {neid}"
-                        )
-
                 session.close()
         else:
             # If not running the query, reload the data from session state
