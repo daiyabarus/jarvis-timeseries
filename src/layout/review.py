@@ -19,10 +19,6 @@ from styles import styling
 
 # MARK: - Config OK
 # BUG: - Need run query if not select neid - DONE
-# TODO: - Need to append target to ltedaily data - create another query chart to display target data with datums DONE
-# TODO: - Need create chart area for payload parameter - DONE
-# TODO: - Need to create chart PRB and Active User - DONE
-# TODO: - Geo Plotting - DONE
 
 
 class Config:
@@ -259,6 +255,7 @@ class QueryManager:
         params = {f"site_{i}": f"%{site}%" for i, site in enumerate(selected_sites)}
         return self.fetch_data(query, params=params)
 
+    # TODO: - Create query for ta-state
     def get_ltetastate_data(self, enodebid, ci):
         query = text(
             """
@@ -926,6 +923,7 @@ class ChartGenerator:
             yaxis_title=y_param,
             plot_bgcolor="#F5F5F5",
             paper_bgcolor="#F5F5F5",
+            height=350,
             font=dict(family="Vodafone", size=18, color="#717577"),
             legend=dict(
                 orientation="h",
@@ -946,7 +944,7 @@ class ChartGenerator:
         with container:
             st.plotly_chart(fig, use_container_width=True)
 
-    # TODO: - Create chart for CQI Cluster
+    # MARK: - Create chart for CQI Cluster
     def cqiclusterchart(self, df, tier_data, xrule=None):
         # Rename df columns for consistency
         df = df.rename(
@@ -991,11 +989,14 @@ class ChartGenerator:
                 go.Scatter(
                     x=baseline_chart1["date"],
                     y=baseline_chart1["cqi"],
-                    mode="lines",
+                    mode="lines+text",
                     line=dict(color=color, dash="dashdot", width=5),
                     name=f"{cellname} - Source",
                     hovertemplate="%{y:.2f}<extra></extra>",
                     hoverlabel=dict(bgcolor="white", font=dict(color="black")),
+                    text=[""] * (len(baseline_chart1) - 5) + [f"{cellname}"],
+                    textposition="top center",
+                    textfont=dict(size=18, color=color),
                 ),
                 row=1,
                 col=i + 1,
@@ -1023,11 +1024,14 @@ class ChartGenerator:
                     go.Scatter(
                         x=tier_value["date"],
                         y=tier_value["cqi"],
-                        mode="lines",
+                        mode="lines+text",
                         line=dict(color=color),
                         name=f"{adjcellname} - 1st tier",
                         hovertemplate="%{y:.2f}<extra></extra>",
                         hoverlabel=dict(bgcolor="white", font=dict(color="black")),
+                        text=[""] * (len(tier_value) - 5) + [f"{adjcellname}"],
+                        textposition="top center",
+                        textfont=dict(size=18, color=color),
                     ),
                     row=1,
                     col=i + 1,
@@ -1040,6 +1044,7 @@ class ChartGenerator:
                     row=1,
                     col=i + 1,
                 )
+
         # Update layout
         fig.update_layout(
             plot_bgcolor="#F5F5F5",
@@ -1138,35 +1143,71 @@ class App:
                 combined_ltedaily_data = []
 
                 # Fetch MCOM data
+                def load_tier_data(tier_path):
+                    try:
+                        tier_data = pd.read_csv(tier_path)
+                        st.write("Successfully loaded tier.csv")
+                    except FileNotFoundError:
+                        st.error(f"File does not exist: {tier_path}")
+                        tier_data = None
+                    except pd.errors.EmptyDataError:
+                        st.write(f"The file {tier_path} is empty.")
+                        tier_data = None
+                    except Exception as e:
+                        st.write(f"An error occurred while reading {tier_path}: {e!s}")
+                        tier_data = None
+                    return tier_data
+
+                # Define a function to display images or messages
+                def display_image_or_message(
+                    column, folder_path, image_name, message_prefix
+                ):
+                    image_path = os.path.join(folder_path, image_name)
+                    if os.path.exists(image_path):
+                        column.image(image_path, caption=None, use_column_width=True)
+                    else:
+                        column.write(f"{message_prefix}: {image_path}")
+
+                # Define a function to style and display markdown
+                def display_styled_markdown(
+                    column, text, font_size=24, text_align="left", tag="h6"
+                ):
+                    styling_args = {
+                        "font_size": font_size,
+                        "text_align": text_align,
+                        "tag": tag,
+                    }
+                    column.markdown(*styling(text, **styling_args))
+
                 for siteid in selected_sites:
                     folder = os.path.join(project_root, "sites", siteid)
                     tier_path = os.path.join(folder, "tier.csv")
-                    tier_data = pd.read_csv(tier_path)
-                    # st.write(tier_data)
 
-                    unique_eutrancellfdd = sorted(
-                        set(tier_data["cellname"].unique()).union(
-                            set(tier_data["adjcellname"].unique())
-                        )
-                    )
+                    if os.path.exists(folder):
+                        tier_data = load_tier_data(tier_path)
+                    else:
+                        st.write(f"Folder does not exist: {folder}")
+                        tier_data = None
 
-                    all_data = pd.concat(
-                        [
-                            self.query_manager.get_cqi_cluster(
-                                eutrancellfdd, start_date, end_date
+                    if tier_data is not None:
+                        unique_eutrancellfdd = sorted(
+                            set(tier_data["cellname"].unique()).union(
+                                set(tier_data["adjcellname"].unique())
                             )
-                            for eutrancellfdd in unique_eutrancellfdd
-                        ],
-                        ignore_index=True,
-                    )
+                        )
+                        all_data = pd.concat(
+                            [
+                                self.query_manager.get_cqi_cluster(
+                                    eutrancellfdd, start_date, end_date
+                                )
+                                for eutrancellfdd in unique_eutrancellfdd
+                            ],
+                            ignore_index=True,
+                        )
 
-                    # Add the resulting DataFrame to the DataFrame manager
-                    self.dataframe_manager.add_dataframe(f"cqitier_{siteid}", all_data)
-                    # self.dataframe_manager.display_dataframe(
-                    #     f"cqitier_{siteid}", f"CQI Data for Site: {siteid}"
-                    # )
-                    # st.write("all_data columns:", all_data.columns)
-                    # st.write("tier_data columns:", tier_data.columns)
+                        self.dataframe_manager.add_dataframe(
+                            f"cqitier_{siteid}", all_data
+                        )
 
                     sac.divider(color="black", align="center")
                     col1, col2, _ = st.columns([1, 1, 5])
@@ -1205,31 +1246,15 @@ class App:
                     st.markdown("# ")
                     col1, col2 = st.columns([2, 1])
 
-                    # TAG: NAURA and ALARM
-                    def display_image_or_message(
-                        column, folder_path, image_name, message_prefix
-                    ):
-                        image_path = os.path.join(folder_path, image_name)
-                        if os.path.exists(image_path):
-                            column.image(
-                                image_path, caption=None, use_column_width=True
-                            )
-                        else:
-                            column.write(f"{message_prefix}: {image_path}")
-
-                    # Define columns first
-                    col1, col2 = st.columns([2, 1])
-
-                    # Use the defined function to display styled markdowns
-                    styling_args = {"font_size": 24, "text_align": "left", "tag": "h6"}
-                    col1.markdown(*styling(f"📝 Naura Site {siteid}", **styling_args))
-                    col2.markdown(*styling(f"⚠️ Alarm Site {siteid}", **styling_args))
+                    # Display styled markdowns
+                    display_styled_markdown(col1, f"📝 Naura Site {siteid}")
+                    display_styled_markdown(col2, f"⚠️ Alarm Site {siteid}")
 
                     # Create containers with borders
                     con1 = col1.container(border=True)
                     con2 = col2.container(border=True)
 
-                    # Display images or messages using the helper function
+                    # Display images or messages
                     if os.path.exists(folder):
                         display_image_or_message(
                             con1, folder, "naura.jpg", "Please upload the image"
@@ -1239,6 +1264,121 @@ class App:
                         )
                     else:
                         st.write(f"Path does not exist: {folder}")
+
+                    # for siteid in selected_sites:
+                    #     folder = os.path.join(project_root, "sites", siteid)
+                    #     tier_path = os.path.join(folder, "tier.csv")
+
+                    #     if os.path.exists(folder):
+                    #         try:
+                    #             tier_data = pd.read_csv(tier_path)
+                    #             st.write("Successfully loaded tier.csv")
+                    #         except FileNotFoundError:
+                    #             st.write(f"File does not exist: {tier_path}")
+                    #             tier_data = None
+                    #         except pd.errors.EmptyDataError:
+                    #             st.write(f"The file {tier_path} is empty.")
+                    #             tier_data = None
+                    #         except Exception as e:
+                    #             st.write(
+                    #                 f"An error occurred while reading {tier_path}: {e!s}"
+                    #             )
+                    #             tier_data = None
+                    #     else:
+                    #         st.write(f"Folder does not exist: {folder}")
+                    #         tier_data = None
+
+                    #     if tier_data is not None:
+                    #         unique_eutrancellfdd = sorted(
+                    #             set(tier_data["cellname"].unique()).union(
+                    #                 set(tier_data["adjcellname"].unique())
+                    #             )
+                    #         )
+                    #         all_data = pd.concat(
+                    #             [
+                    #                 self.query_manager.get_cqi_cluster(
+                    #                     eutrancellfdd, start_date, end_date
+                    #                 )
+                    #                 for eutrancellfdd in unique_eutrancellfdd
+                    #             ],
+                    #             ignore_index=True,
+                    #         )
+
+                    #         self.dataframe_manager.add_dataframe(
+                    #             f"cqitier_{siteid}", all_data
+                    #         )
+
+                    #     sac.divider(color="black", align="center")
+                    #     col1, col2, _ = st.columns([1, 1, 5])
+
+                    #     with col1.container():
+                    #         with stylable_container(
+                    #             key="erilogo",
+                    #             css_styles="""
+                    #                 img {
+                    #                     display: block;
+                    #                     margin-left: auto;
+                    #                     margin-right: auto;
+                    #                     width: 100%;
+                    #                     position: relative;
+                    #                     top: 5px;
+                    #                 }
+                    #             """,
+                    #         ):
+                    #             st.image(assets_image + "eri.png")
+
+                    #     with col2.container():
+                    #         with stylable_container(
+                    #             key="tsellogo",
+                    #             css_styles="""
+                    #                 img {
+                    #                     display: block;
+                    #                     margin-left: auto;
+                    #                     margin-right: auto;
+                    #                     width: 100%;
+                    #                     position: relative;
+                    #                     top: 0px;  /* Adjust this value as needed */
+                    #                 }
+                    #             """,
+                    #         ):
+                    #             st.image(assets_image + "tsel.png")
+                    #     st.markdown("# ")
+                    #     col1, col2 = st.columns([2, 1])
+
+                    #     # TAG: NAURA and ALARM
+                    #     def display_image_or_message(
+                    #         column, folder_path, image_name, message_prefix
+                    #     ):
+                    #         image_path = os.path.join(folder_path, image_name)
+                    #         if os.path.exists(image_path):
+                    #             column.image(
+                    #                 image_path, caption=None, use_column_width=True
+                    #             )
+                    #         else:
+                    #             column.write(f"{message_prefix}: {image_path}")
+
+                    #     # Define columns first
+                    #     col1, col2 = st.columns([2, 1])
+
+                    #     # Use the defined function to display styled markdowns
+                    #     styling_args = {"font_size": 24, "text_align": "left", "tag": "h6"}
+                    #     col1.markdown(*styling(f"📝 Naura Site {siteid}", **styling_args))
+                    #     col2.markdown(*styling(f"⚠️ Alarm Site {siteid}", **styling_args))
+
+                    #     # Create containers with borders
+                    #     con1 = col1.container(border=True)
+                    #     con2 = col2.container(border=True)
+
+                    #     # Display images or messages using the helper function
+                    #     if os.path.exists(folder):
+                    #         display_image_or_message(
+                    #             con1, folder, "naura.jpg", "Please upload the image"
+                    #         )
+                    #         display_image_or_message(
+                    #             con2, folder, "alarm.jpg", "Please upload the image"
+                    #         )
+                    #     else:
+                    #         st.write(f"Path does not exist: {folder}")
 
                     mcom_data = self.query_manager.get_mcom_data(siteid)
                     self.dataframe_manager.add_dataframe(
@@ -1250,8 +1390,6 @@ class App:
                             row["KABUPATEN"],
                             row["MC_class"],
                             row["LTE"],
-                            # row["KABUPATEN"],
-                            # row["LTE"],
                         )
                         target_data["EutranCell"] = row["Cell_Name"]
                         combined_target_data.append(target_data)
@@ -1321,7 +1459,10 @@ class App:
                     # TAG: - Availability
                     st.markdown(
                         *styling(
-                            f"📶 Service Availability for Site {siteid}", **styling_args
+                            f"📶 Service Availability for Site {siteid}",
+                            font_size=24,
+                            text_align="left",
+                            tag="h6",
                         )
                     )
                     self.chart_generator.create_charts(
@@ -1338,7 +1479,10 @@ class App:
                     # TAG: - RRC Setup Success Rate
                     st.markdown(
                         *styling(
-                            f"📶 RRC Success Rate for Site {siteid}", **styling_args
+                            f"📶 RRC Success Rate for Site {siteid}",
+                            font_size=24,
+                            text_align="left",
+                            tag="h6",
                         )
                     )
                     self.chart_generator.create_charts_datums(
@@ -1357,7 +1501,9 @@ class App:
                     st.markdown(
                         *styling(
                             f"📶 E-RAB Setup Success Rate for Site {siteid}",
-                            **styling_args,
+                            font_size=24,
+                            text_align="left",
+                            tag="h6",
                         )
                     )
 
@@ -1377,7 +1523,9 @@ class App:
                     st.markdown(
                         *styling(
                             f"📶 Session Setup Success Rate for Site {siteid}",
-                            **styling_args,
+                            font_size=24,
+                            text_align="left",
+                            tag="h6",
                         )
                     )
 
@@ -1397,7 +1545,9 @@ class App:
                     st.markdown(
                         *styling(
                             f"📶 Session Abnormal Release Sectoral for Site {siteid}",
-                            **styling_args,
+                            font_size=24,
+                            text_align="left",
+                            tag="h6",
                         )
                     )
 
@@ -1417,7 +1567,9 @@ class App:
                     st.markdown(
                         *styling(
                             f"📶 CQI Distribution (Non-Homogeneous) Sectoral for Site {siteid}",
-                            **styling_args,
+                            font_size=24,
+                            text_align="left",
+                            tag="h6",
                         )
                     )
 
@@ -1437,7 +1589,9 @@ class App:
                     st.markdown(
                         *styling(
                             f"📶 Spectral Efficiency Analysis Sectoral for Site {siteid}",
-                            **styling_args,
+                            font_size=24,
+                            text_align="left",
+                            tag="h6",
                         )
                     )
 
@@ -1457,7 +1611,9 @@ class App:
                     st.markdown(
                         *styling(
                             f"📶 Intra-Frequency Handover Performance Sectoral for Site {siteid} (%)",
-                            **styling_args,
+                            font_size=24,
+                            text_align="left",
+                            tag="h6",
                         )
                     )
 
@@ -1477,7 +1633,9 @@ class App:
                     st.markdown(
                         *styling(
                             f"📶 Inter-Frequency Handover Performance Sectoral for Site {siteid} (%)",
-                            **styling_args,
+                            font_size=24,
+                            text_align="left",
+                            tag="h6",
                         )
                     )
 
@@ -1497,7 +1655,9 @@ class App:
                     st.markdown(
                         *styling(
                             f"📶 Average UL RSSI Sectoral for Site {siteid} (dBm)",
-                            **styling_args,
+                            font_size=24,
+                            text_align="left",
+                            tag="h6",
                         )
                     )
 
@@ -1518,7 +1678,9 @@ class App:
                     st.markdown(
                         *styling(
                             f"📶 Throughput (Mbps) Sectoral for Site {siteid}",
-                            **styling_args,
+                            font_size=24,
+                            text_align="left",
+                            tag="h6",
                         )
                     )
 
@@ -1537,7 +1699,9 @@ class App:
                     st.markdown(
                         *styling(
                             f"📶 Payload Distribution Sectoral for Site {siteid} (Gpbs)",
-                            **styling_args,
+                            font_size=24,
+                            text_align="left",
+                            tag="h6",
                         )
                     )
 
@@ -1593,7 +1757,9 @@ class App:
                     st.markdown(
                         *styling(
                             f"📶 Payload Distribution by Frequency for Site  {siteid} (Gpbs)",
-                            **styling_args,
+                            font_size=24,
+                            text_align="left",
+                            tag="h6",
                         )
                     )
 
@@ -1601,7 +1767,9 @@ class App:
                     st.markdown(
                         *styling(
                             f"📶 Total Site Payload Overview for Site {siteid} (Gpbs)",
-                            **styling_args,
+                            font_size=24,
+                            text_align="left",
+                            tag="h6",
                         )
                     )
                 # TAG: - Payload Neid
@@ -1656,8 +1824,10 @@ class App:
 
                 st.markdown(
                     *styling(
-                        f"📶 CQI Comparison across Frequencies for Site {siteid}",
-                        **styling_args,
+                        f"📶 CQI Comparison Across Frequencies for Site  {siteid}",
+                        font_size=24,
+                        text_align="left",
+                        tag="h6",
                     )
                 )
 
@@ -1672,25 +1842,32 @@ class App:
                     xrule=True,
                 )
 
-                # TODO: CQI 1st tier
+                # MARK: CQI 1st tier
                 st.markdown(
                     *styling(
-                        f"📶 CQI Comparison across 1st Tier {siteid}",
-                        **styling_args,
+                        f"📶 CQI: {siteid} vs. Tier 1",
+                        font_size=24,
+                        text_align="left",
+                        tag="h6",
                     )
                 )
-
-                self.chart_generator.cqiclusterchart(
-                    all_data,
-                    tier_data,
-                    xrule,
-                )
+                if tier_data is not None:
+                    try:
+                        self.chart_generator.cqiclusterchart(
+                            all_data,
+                            tier_data,
+                            xrule,
+                        )
+                    except Exception as e:
+                        st.write(f"An error occurred: {e!s}")
 
                 # TAG: - PRB & Active User
                 st.markdown(
                     *styling(
                         f"📶 PRB Utilization Sectoral for Site {siteid}",
-                        **styling_args,
+                        font_size=24,
+                        text_align="left",
+                        tag="h6",
                     )
                 )
                 self.chart_generator.create_charts(
@@ -1706,7 +1883,9 @@ class App:
                 st.markdown(
                     *styling(
                         f"📶 Active User Sectoral for {siteid}",
-                        **styling_args,
+                        font_size=24,
+                        text_align="left",
+                        tag="h6",
                     )
                 )
                 self.chart_generator.create_charts(
@@ -1727,7 +1906,9 @@ class App:
                     st.markdown(
                         *styling(
                             f"📶 VSWR Analysis for Site {siteid} (dBm)",
-                            **styling_args,
+                            font_size=24,
+                            text_align="left",
+                            tag="h6",
                         )
                     )
 
@@ -1735,7 +1916,9 @@ class App:
                     st.markdown(
                         *styling(
                             f"📶 RET After {siteid}",
-                            **styling_args,
+                            font_size=24,
+                            text_align="left",
+                            tag="h6",
                         )
                     )
 
@@ -1805,7 +1988,9 @@ class App:
                 st.markdown(
                     *styling(
                         f"☢️ MDT and TA Summary for Site {siteid}",
-                        **styling_args,
+                        font_size=24,
+                        text_align="left",
+                        tag="h6",
                     )
                 )
                 self.geodata = GeoApp(mcom_data, ltemdtdata)
