@@ -18,7 +18,6 @@ from streamlit_extras.stylable_container import stylable_container
 from styles import styling
 
 # MARK: - Config OK
-# BUG: - Need run query if not select neid - DONE
 
 
 class Config:
@@ -125,7 +124,9 @@ class QueryManager:
         )
         return self.fetch_data(query, {"siteid": siteid})
 
-    def get_mcom_neid(self):
+    def get_mcom_neid(
+        self,
+    ):
         query = text(
             """
             SELECT "NE_ID", "Cell_Name", "Longitude", "Latitude", "Dir"
@@ -256,15 +257,40 @@ class QueryManager:
         return self.fetch_data(query, params=params)
 
     # TODO: - Create query for ta-state
-    def get_ltetastate_data(self, enodebid, ci):
+    def get_ltetastate_data(self, siteid):
+        like_conditions = " OR ".join(
+            [f'"site" LIKE :site_{i}' for i in range(len(siteid))]
+        )
+
         query = text(
+            f"""
+            SELECT *
+            FROM ltetastate
+            WHERE ({like_conditions})
             """
-        SELECT *
-        FROM ltetastate
-        WHERE enodebid = :enodebid AND ci = :ci
+        )
+
+        params = {f"site_{i}": f"%{site}%" for i, site in enumerate(siteid)}
+        return self.fetch_data(query, params=params)
+
+    def get_mcom_tastate(self, selected_neids):
+        like_conditions = " OR ".join(
+            [f'"NE_ID" LIKE :neid_{i}' for i in range(len(selected_neids))]
+        )
+        query = text(
+            f"""
+        SELECT
+        "Site_ID",
+        "NE_ID",
+        "Cell_Name",
+        "cellId",
+        "eNBId"
+        FROM mcom
+        WHERE ({like_conditions})
         """
         )
-        return self.fetch_data(query, {"enodebid": enodebid, "ci": ci})
+        params = {f"neid_{i}": f"%{neid}%" for i, neid in enumerate(selected_neids)}
+        return self.fetch_data(query, params=params)
 
     def get_vswr_data(self, selected_sites, end_date):
         like_conditions = " OR ".join(
@@ -575,7 +601,6 @@ class ChartGenerator:
                 padding=10,
                 titlePadding=10,
                 cornerRadius=10,
-                # strokeColor="#9A9A9A",
                 columns=6,
                 titleAnchor="start",
                 direction="vertical",
@@ -944,7 +969,7 @@ class ChartGenerator:
         with container:
             st.plotly_chart(fig, use_container_width=True)
 
-    # MARK: - Create chart for CQI Cluster
+    # TAG: - Create chart for CQI Cluster
     def cqiclusterchart(self, df, tier_data, xrule=None):
         # Rename df columns for consistency
         df = df.rename(
@@ -1265,121 +1290,6 @@ class App:
                     else:
                         st.write(f"Path does not exist: {folder}")
 
-                    # for siteid in selected_sites:
-                    #     folder = os.path.join(project_root, "sites", siteid)
-                    #     tier_path = os.path.join(folder, "tier.csv")
-
-                    #     if os.path.exists(folder):
-                    #         try:
-                    #             tier_data = pd.read_csv(tier_path)
-                    #             st.write("Successfully loaded tier.csv")
-                    #         except FileNotFoundError:
-                    #             st.write(f"File does not exist: {tier_path}")
-                    #             tier_data = None
-                    #         except pd.errors.EmptyDataError:
-                    #             st.write(f"The file {tier_path} is empty.")
-                    #             tier_data = None
-                    #         except Exception as e:
-                    #             st.write(
-                    #                 f"An error occurred while reading {tier_path}: {e!s}"
-                    #             )
-                    #             tier_data = None
-                    #     else:
-                    #         st.write(f"Folder does not exist: {folder}")
-                    #         tier_data = None
-
-                    #     if tier_data is not None:
-                    #         unique_eutrancellfdd = sorted(
-                    #             set(tier_data["cellname"].unique()).union(
-                    #                 set(tier_data["adjcellname"].unique())
-                    #             )
-                    #         )
-                    #         all_data = pd.concat(
-                    #             [
-                    #                 self.query_manager.get_cqi_cluster(
-                    #                     eutrancellfdd, start_date, end_date
-                    #                 )
-                    #                 for eutrancellfdd in unique_eutrancellfdd
-                    #             ],
-                    #             ignore_index=True,
-                    #         )
-
-                    #         self.dataframe_manager.add_dataframe(
-                    #             f"cqitier_{siteid}", all_data
-                    #         )
-
-                    #     sac.divider(color="black", align="center")
-                    #     col1, col2, _ = st.columns([1, 1, 5])
-
-                    #     with col1.container():
-                    #         with stylable_container(
-                    #             key="erilogo",
-                    #             css_styles="""
-                    #                 img {
-                    #                     display: block;
-                    #                     margin-left: auto;
-                    #                     margin-right: auto;
-                    #                     width: 100%;
-                    #                     position: relative;
-                    #                     top: 5px;
-                    #                 }
-                    #             """,
-                    #         ):
-                    #             st.image(assets_image + "eri.png")
-
-                    #     with col2.container():
-                    #         with stylable_container(
-                    #             key="tsellogo",
-                    #             css_styles="""
-                    #                 img {
-                    #                     display: block;
-                    #                     margin-left: auto;
-                    #                     margin-right: auto;
-                    #                     width: 100%;
-                    #                     position: relative;
-                    #                     top: 0px;  /* Adjust this value as needed */
-                    #                 }
-                    #             """,
-                    #         ):
-                    #             st.image(assets_image + "tsel.png")
-                    #     st.markdown("# ")
-                    #     col1, col2 = st.columns([2, 1])
-
-                    #     # TAG: NAURA and ALARM
-                    #     def display_image_or_message(
-                    #         column, folder_path, image_name, message_prefix
-                    #     ):
-                    #         image_path = os.path.join(folder_path, image_name)
-                    #         if os.path.exists(image_path):
-                    #             column.image(
-                    #                 image_path, caption=None, use_column_width=True
-                    #             )
-                    #         else:
-                    #             column.write(f"{message_prefix}: {image_path}")
-
-                    #     # Define columns first
-                    #     col1, col2 = st.columns([2, 1])
-
-                    #     # Use the defined function to display styled markdowns
-                    #     styling_args = {"font_size": 24, "text_align": "left", "tag": "h6"}
-                    #     col1.markdown(*styling(f"📝 Naura Site {siteid}", **styling_args))
-                    #     col2.markdown(*styling(f"⚠️ Alarm Site {siteid}", **styling_args))
-
-                    #     # Create containers with borders
-                    #     con1 = col1.container(border=True)
-                    #     con2 = col2.container(border=True)
-
-                    #     # Display images or messages using the helper function
-                    #     if os.path.exists(folder):
-                    #         display_image_or_message(
-                    #             con1, folder, "naura.jpg", "Please upload the image"
-                    #         )
-                    #         display_image_or_message(
-                    #             con2, folder, "alarm.jpg", "Please upload the image"
-                    #         )
-                    #     else:
-                    #         st.write(f"Path does not exist: {folder}")
-
                     mcom_data = self.query_manager.get_mcom_data(siteid)
                     self.dataframe_manager.add_dataframe(
                         f"mcom_data_{siteid}", mcom_data
@@ -1393,12 +1303,7 @@ class App:
                         )
                         target_data["EutranCell"] = row["Cell_Name"]
                         combined_target_data.append(target_data)
-
-                        ltetastate_data = self.query_manager.get_ltetastate_data(
-                            row["eNBId"], row["cellId"]
-                        )
-                        ltetastate_data["EutranCell"] = row["Cell_Name"]
-                        combined_ltetastate_data.append(ltetastate_data)
+                        # st.write(target_data)
 
                     # Fetch LTE daily data for each site
                     ltedaily_data = self.query_manager.get_ltedaily_data(
@@ -1416,6 +1321,9 @@ class App:
                     )
                     self.dataframe_manager.add_dataframe(
                         "combined_target_data", combined_target_df
+                    )
+                    self.dataframe_manager.display_dataframe(
+                        "combined_target_df", "target"
                     )
 
                 # Combine ltetastate data and display
@@ -1739,6 +1647,7 @@ class App:
                     "ltebusyhour_data", ltebusyhour_data
                 )
 
+                # TAG: - LTE Hourly Data
                 self.dataframe_manager.add_dataframe("ltehourly_data", ltehourly_data)
 
                 vswr_data = self.query_manager.get_vswr_data(selected_sites, end_date)
@@ -1983,6 +1892,41 @@ class App:
                                 st.write(f"Please upload the image: {ret}")
                         else:
                             st.write(f"Path does not exist: {folder}")
+
+                # TODO: mcom and ta state
+                mcom_ta = self.query_manager.get_mcom_tastate(selected_neids)
+                self.dataframe_manager.add_dataframe("mcom_ta", mcom_ta)
+                # st.write(mcom_ta)
+
+                # Use the correct column names from the ltetastate DataFrame
+                ltetastate_data = self.query_manager.get_ltetastate_data(selected_sites)
+                self.dataframe_manager.add_dataframe("ltetastate_data", ltetastate_data)
+                # st.write(ltetastate_data)
+                mcom_ta["cellId"] = mcom_ta["cellId"].astype(float)
+                mcom_ta["eNBId"] = mcom_ta["eNBId"].astype(float)
+                ltetastate_data["ci"] = ltetastate_data["ci"].astype(float)
+                ltetastate_data["enodebid"] = ltetastate_data["enodebid"].astype(float)
+
+                # Rename columns to match for merging
+                mcom_ta_renamed = mcom_ta.rename(
+                    columns={"cellId": "ci", "eNBId": "enodebid"}
+                )
+
+                # Set the index to 'ci' and 'enodebid' for both DataFrames
+                mcom_ta_indexed = mcom_ta_renamed.set_index(["ci", "enodebid"])
+                ltetastate_data_indexed = ltetastate_data.set_index(["ci", "enodebid"])
+
+                # Concatenate the DataFrames along the columns axis
+                merged_df = pd.merge(
+                    mcom_ta_indexed,
+                    ltetastate_data_indexed,
+                    on=["ci", "enodebid"],
+                    how="inner",
+                )
+
+                # Add the merged DataFrame to the dataframe manager and display it
+                self.dataframe_manager.add_dataframe("merged_df", merged_df)
+                st.write(merged_df)
 
                 st.session_state.ltemdtdata = ltemdtdata
                 st.markdown(
