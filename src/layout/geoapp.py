@@ -32,7 +32,6 @@ class GeoApp:
             "Google Hybrid": "https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
         }
 
-    # @st.cache_data
     def initialize_map(self):
         """Initialize the map with a selected tile provider."""
         if "tile_provider" not in st.session_state:
@@ -45,7 +44,7 @@ class GeoApp:
         )
         if st.session_state.tile_provider != tile_provider:
             st.session_state.tile_provider = tile_provider
-            # st.rerun()
+            st.experimental_rerun()
         self.map = folium.Map(
             location=self.map_center,
             zoom_start=15,
@@ -55,8 +54,12 @@ class GeoApp:
 
     def get_ci_color(self, ci):
         """Get color based on Cell ID index."""
-        ci_index = self.unique_cis.index(ci)
-        return ColorPalette.get_color(ci_index)
+        try:
+            ci_index = self.unique_cis.index(ci)
+            return ColorPalette.get_color(ci_index)
+        except ValueError:
+            st.error(f"CI {ci} is not in the mcom Database, Please update the Data.")
+            return "black"
 
     def get_rsrp_color(self, rsrp):
         """Determines the color representation based on the RSRP value."""
@@ -247,7 +250,6 @@ class GeoApp:
         combined_macro._template = Template(combined_legend_template)
         self.map.get_root().add_child(combined_macro)
 
-    # @st.cache_data
     def run_geo_app(self):
         col1, col2, _, _ = st.columns([1, 1, 2, 2])
 
@@ -270,7 +272,7 @@ class GeoApp:
             )
             if st.session_state.category != category:
                 st.session_state.category = category
-                # st.rerun()
+                st.experimental_rerun()
 
         col1, col2, col3 = st.columns([3, 1, 1])
 

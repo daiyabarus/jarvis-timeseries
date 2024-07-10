@@ -1,6 +1,7 @@
 import os
 
 import altair as alt
+import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -9,6 +10,7 @@ import toml
 from colors import ColorPalette
 from geoapp import GeoApp
 from omegaconf import DictConfig, OmegaConf
+from plotly.subplots import make_subplots
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from streamlit_extras.mandatory_date_range import date_range_picker
@@ -315,6 +317,29 @@ class QueryManager:
         params.update({"start_date": start_date, "end_date": end_date})
 
         return self.fetch_data(query, params=params)
+
+    def get_cqi_cluster(self, eutrancellfdd, start_date, end_date):
+        query = text(
+            """
+            SELECT
+                "DATE_ID",
+                "EUtranCellFDD",
+                "CQI"
+            FROM ltebusyhour
+            WHERE "EUtranCellFDD" LIKE :eutrancellfdd
+            AND "DATE_ID" BETWEEN :start_date AND :end_date
+            """
+        )
+        params = {
+            "eutrancellfdd": eutrancellfdd,
+            "start_date": start_date,
+            "end_date": end_date,
+        }
+        try:
+            return pd.read_sql(query, self.engine, params=params)
+        except Exception as e:
+            st.error(f"Error fetching data: {e}")
+            return pd.DataFrame()
 
 
 class ChartGenerator:
@@ -864,117 +889,18 @@ class ChartGenerator:
             with container:
                 st.altair_chart(combined_chart, use_container_width=True)
 
-    # TAG: - create_charts_vswr
-    # def create_charts_vswr(self, df, x1_param, x2_param, y_param, nename):
-    #     # Define color mapping
-    #     color_mapping = {
-    #         cell: color
-    #         for cell, color in zip(
-    #             df[x2_param].unique(),
-    #             self.get_colors(len(df[x2_param].unique())),
-    #         )
-    #     }
-
-    #     # Create baseline rule
-    #     baseline_value = 1.3
-    #     baseline = (
-    #         alt.Chart(pd.DataFrame({"baseline": [baseline_value]}))
-    #         .mark_rule(color="#F74B00", strokeDash=[8, 4], strokeWidth=4)
-    #         .encode(y="baseline:Q")
-    #     )
-
-    #     # Create main chart
-    #     bars = (
-    #         alt.Chart(df)
-    #         .mark_bar(size=10)  # Increased bar width
-    #         .encode(
-    #             x=alt.X(
-    #                 x1_param,
-    #                 type="ordinal",
-    #                 axis=alt.Axis(title="", labels=False),  # Show x-axis labels
-    #                 sort=alt.SortField(
-    #                     field=x1_param, order="ascending"
-    #                 ),  # Sort bars from left to right
-    #                 scale=alt.Scale(
-    #                     type="point", padding=0.1
-    #                 ),  # Adjust padding between bars
-    #             ),
-    #             y=alt.Y(
-    #                 y_param,
-    #                 type="quantitative",
-    #                 axis=alt.Axis(title=y_param),
-    #                 stack=None,  # Remove stacking to create unstacked bars
-    #             ),
-    #             color=alt.Color(
-    #                 x2_param,
-    #                 scale=alt.Scale(
-    #                     domain=list(color_mapping.keys()),
-    #                     range=list(color_mapping.values()),
-    #                 ),
-    #                 legend=alt.Legend(title=x2_param),
-    #             ),
-    #             tooltip=[x1_param, x2_param, y_param],
-    #         )
-    #         .properties(width=300, height=150)
-    #     )
-
-    #     # Create highlight chart for values above the baseline
-    #     highlight = bars.mark_bar(color="#e45755").transform_filter(
-    #         alt.datum[y_param] > baseline_value
-    #     )
-
-    #     # Combine charts and add facet for NE_NAME
-    #     base_chart = bars + highlight + baseline
-
-    #     # Configure facet, scale, and view
-    #     chart_with_facet_and_scale = (
-    #         base_chart.facet(
-    #             column=alt.Facet(nename, type="nominal", title=""),
-    #             spacing=0,  # Remove spacing between facets
-    #         )
-    #         .resolve_scale(
-    #             x="independent"
-    #         )  # Use independent x-axis scale for each facet
-    #         .configure_view(strokeWidth=0)
-    #     )
-
-    #     # Configure chart appearance
-    #     configured_chart = (
-    #         chart_with_facet_and_scale.configure(background="#F5F5F5")
-    #         .configure_title(
-    #             fontSize=18, anchor="middle", font="Vodafone", color="#717577"
-    #         )
-    #         .configure_legend(
-    #             orient="bottom",
-    #             titleFontSize=16,
-    #             labelFontSize=14,
-    #             labelFont="Vodafone",
-    #             titleColor="#5F6264",
-    #             padding=10,
-    #             titlePadding=10,
-    #             cornerRadius=10,
-    #             columns=6,
-    #             titleAnchor="start",
-    #             direction="vertical",
-    #             gradientLength=400,
-    #             labelLimit=0,
-    #             symbolSize=30,
-    #             symbolType="square",
-    #         )
-    #     )
-
-    #     container = st.container()
-    #     with container:
-    #         st.altair_chart(configured_chart, use_container_width=True)
     def create_charts_vswr(self, df, x1_param, x2_param, y_param, nename):
-        unique_values = df[x2_param].unique()
+        # Calculate the average y_param for each combination of x1_param and x2_param
+        avg_df = df.groupby([x1_param, x2_param])[y_param].mean().reset_index()
+
+        unique_values = avg_df[x2_param].unique()
         colors = self.get_colors(len(unique_values))
         color_mapping = {cell: color for cell, color in zip(unique_values, colors)}
 
         fig = go.Figure()
 
         for value in unique_values:
-            filtered_df = df[df[x2_param] == value]
+            filtered_df = avg_df[avg_df[x2_param] == value]
             fig.add_trace(
                 go.Bar(
                     x=filtered_df[x1_param],
@@ -1019,6 +945,137 @@ class ChartGenerator:
         container = st.container()
         with container:
             st.plotly_chart(fig, use_container_width=True)
+
+    # TODO: - Create chart for CQI Cluster
+    def cqiclusterchart(self, df, tier_data, xrule=None):
+        # Rename df columns for consistency
+        df = df.rename(
+            columns={"DATE_ID": "date", "EUtranCellFDD": "cellname", "CQI": "cqi"}
+        )
+
+        # Convert date column to datetime format
+        df["date"] = pd.to_datetime(df["date"])
+
+        # Get unique cellnames from tier_data
+        unique_cellnames = tier_data["cellname"].unique()
+
+        # Get unique adjcellnames from tier_data
+        unique_adjcellnames = tier_data["adjcellname"].unique()
+
+        # Combine unique_cellnames and unique_adjcellnames to get all unique names
+        all_unique_names = np.unique(
+            np.concatenate((unique_cellnames, unique_adjcellnames))
+        )
+
+        # Generate colors for all unique names
+        colors = self.get_colors(len(all_unique_names))
+
+        # Create color mapping for all unique names
+        color_mapping = {name: color for name, color in zip(all_unique_names, colors)}
+
+        # Create subplots
+        fig = make_subplots(rows=1, cols=len(unique_cellnames), shared_yaxes=True)
+
+        for i, cellname in enumerate(unique_cellnames):
+            # Filter df for the current cellname
+            baseline_chart1 = df[df["cellname"] == cellname]
+
+            # Sort baseline_chart1 by date
+            baseline_chart1 = baseline_chart1.sort_values("date")
+            color = color_mapping.get(
+                cellname, "black"
+            )  # Default to black if not found
+
+            # Create dashdot line for cellname
+            fig.add_trace(
+                go.Scatter(
+                    x=baseline_chart1["date"],
+                    y=baseline_chart1["cqi"],
+                    mode="lines",
+                    line=dict(color=color, dash="dashdot", width=5),
+                    name=f"{cellname} - Source",
+                    hovertemplate="%{y:.2f}<extra></extra>",
+                    hoverlabel=dict(bgcolor="white", font=dict(color="black")),
+                ),
+                row=1,
+                col=i + 1,
+            )
+
+            # Get adjcellnames for the current cellname
+            adjcellnames = tier_data[tier_data["cellname"] == cellname][
+                "adjcellname"
+            ].unique()
+
+            for adjcellname in adjcellnames:
+                # Filter df for the current adjcellname
+                tier_value = df[df["cellname"] == adjcellname]
+
+                # Sort tier_value by date
+                tier_value = tier_value.sort_values("date")
+
+                # Get color for the current adjcellname from the color mapping
+                color = color_mapping.get(
+                    adjcellname, "black"
+                )  # Default to black if not found
+
+                # Create line chart for adjcellname
+                fig.add_trace(
+                    go.Scatter(
+                        x=tier_value["date"],
+                        y=tier_value["cqi"],
+                        mode="lines",
+                        line=dict(color=color),
+                        name=f"{adjcellname} - 1st tier",
+                        hovertemplate="%{y:.2f}<extra></extra>",
+                        hoverlabel=dict(bgcolor="white", font=dict(color="black")),
+                    ),
+                    row=1,
+                    col=i + 1,
+                )
+
+            if xrule:
+                fig.add_vline(
+                    x=xrule,
+                    line=dict(color="#F7BB00", width=4, dash="dash"),
+                    row=1,
+                    col=i + 1,
+                )
+        # Update layout
+        fig.update_layout(
+            plot_bgcolor="#F5F5F5",
+            paper_bgcolor="#F5F5F5",
+            font=dict(family="Vodafone", size=50, color="#717577"),
+            margin=dict(l=20, r=20, t=40, b=20),
+            height=350,
+            showlegend=True,
+            legend=dict(
+                orientation="h",
+                yanchor="top",
+                y=-0.4,
+                xanchor="center",
+                x=0.5,
+                bgcolor="#F5F5F5",
+                bordercolor="#F5F5F5",
+                itemclick="toggleothers",
+                itemdoubleclick="toggle",
+            ),
+        )
+
+        with stylable_container(
+            key="container_with_border",
+            css_styles="""
+                {
+                    background-color: #F5F5F5;
+                    border: 2px solid rgba(49, 51, 63, 0.2);
+                    border-radius: 0.5rem;
+                    padding: calc(1em - 1px)
+                }
+                """,
+        ):
+            # Display the chart in Streamlit
+            container = st.container()
+            with container:
+                st.plotly_chart(fig, use_container_width=True)
 
 
 class App:
@@ -1083,12 +1140,33 @@ class App:
                 # Fetch MCOM data
                 for siteid in selected_sites:
                     folder = os.path.join(project_root, "sites", siteid)
-                    # tier_path = os.path.join(folder, "tier.csv")
-                    # tier_data = pd.read_csv(tier_path)
-                    # isd_path = os.path.join(folder, "isd.csv")
-                    # isd_data = pd.read_csv(isd_path)
+                    tier_path = os.path.join(folder, "tier.csv")
+                    tier_data = pd.read_csv(tier_path)
                     # st.write(tier_data)
-                    # st.write(isd_data)
+
+                    unique_eutrancellfdd = sorted(
+                        set(tier_data["cellname"].unique()).union(
+                            set(tier_data["adjcellname"].unique())
+                        )
+                    )
+
+                    all_data = pd.concat(
+                        [
+                            self.query_manager.get_cqi_cluster(
+                                eutrancellfdd, start_date, end_date
+                            )
+                            for eutrancellfdd in unique_eutrancellfdd
+                        ],
+                        ignore_index=True,
+                    )
+
+                    # Add the resulting DataFrame to the DataFrame manager
+                    self.dataframe_manager.add_dataframe(f"cqitier_{siteid}", all_data)
+                    # self.dataframe_manager.display_dataframe(
+                    #     f"cqitier_{siteid}", f"CQI Data for Site: {siteid}"
+                    # )
+                    # st.write("all_data columns:", all_data.columns)
+                    # st.write("tier_data columns:", tier_data.columns)
 
                     sac.divider(color="black", align="center")
                     col1, col2, _ = st.columns([1, 1, 5])
@@ -1594,6 +1672,20 @@ class App:
                     xrule=True,
                 )
 
+                # TODO: CQI 1st tier
+                st.markdown(
+                    *styling(
+                        f"📶 CQI Comparison across 1st Tier {siteid}",
+                        **styling_args,
+                    )
+                )
+
+                self.chart_generator.cqiclusterchart(
+                    all_data,
+                    tier_data,
+                    xrule,
+                )
+
                 # TAG: - PRB & Active User
                 st.markdown(
                     *styling(
@@ -1629,7 +1721,7 @@ class App:
                 # Fetch VSWR data
 
                 # TAG: - VSWR
-                col1, col2 = st.columns([2, 1])
+                col1, col2 = st.columns([3, 2])
 
                 with col1:
                     st.markdown(
@@ -1647,7 +1739,7 @@ class App:
                         )
                     )
 
-                col1, col2 = st.columns([2, 1])
+                col1, col2 = st.columns([3, 2])
                 con1 = col1.container()
                 con2 = col2.container()
                 with con1:
