@@ -2,11 +2,11 @@ import os
 
 import altair as alt
 import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
+import streamlit_antd_components as sac
 import toml
 from colors import ColorPalette
-
-# from streamlit_dynamic_filters import DynamicFilters
 from geoapp import GeoApp
 from omegaconf import DictConfig, OmegaConf
 from sqlalchemy import create_engine, text
@@ -272,8 +272,7 @@ class QueryManager:
             [f'"NE_NAME" LIKE :site_{i}' for i in range(len(selected_sites))]
         )
 
-        # Calculate start_date as one day before end_date
-        start_date = end_date - pd.Timedelta(days=1)
+        start_date = end_date - pd.Timedelta(days=3)
 
         query = text(
             f"""
@@ -288,6 +287,28 @@ class QueryManager:
         AND "DATE_ID" BETWEEN :start_date AND :end_date
         AND "RRU" NOT LIKE '%RfPort=R%'
         AND "RRU" NOT LIKE '%RfPort=S%'
+        AND "VSWR" != 0
+        """
+        )
+        params = {f"site_{i}": f"%{site}%" for i, site in enumerate(selected_sites)}
+        params.update({"start_date": start_date, "end_date": end_date})
+
+        return self.fetch_data(query, params=params)
+
+    def get_busyhour(self, selected_sites, end_date):
+        like_conditions = " OR ".join(
+            [f'"EUtranCellFDD" LIKE :site_{i}' for i in range(len(selected_sites))]
+        )
+        start_date = end_date - pd.Timedelta(days=15)
+        query = text(
+            f"""
+        SELECT
+            "DATE_ID",
+            "EUtranCellFDD",
+            "CQI"
+        FROM ltebusyhour
+        WHERE ({like_conditions})
+        AND "DATE_ID" BETWEEN :start_date AND :end_date
         """
         )
         params = {f"site_{i}": f"%{site}%" for i, site in enumerate(selected_sites)}
@@ -571,7 +592,6 @@ class ChartGenerator:
         xrule=None,
     ):
         sectors = sorted(df[sector_param].apply(self.determine_sector).unique())
-
         color_mapping = {
             cell: color
             for cell, color in zip(
@@ -583,12 +603,7 @@ class ChartGenerator:
         charts = []
         for sector in sectors:
             sector_df = df[df[sector_param].apply(self.determine_sector) == sector]
-
-            # Determine y-axis range
-            if yaxis_range:
-                y_scale = alt.Scale(domain=yaxis_range)
-            else:
-                y_scale = alt.Scale()
+            y_scale = alt.Scale(domain=yaxis_range) if yaxis_range else alt.Scale()
 
             sector_chart = (
                 alt.Chart(sector_df)
@@ -612,9 +627,8 @@ class ChartGenerator:
                 )
                 .properties(title=f"Sector {sector}", width=600, height=150)
             )
-            # charts.append(sector_chart)
 
-            if xrule:
+            if xrule and "xrule_date" in st.session_state:
                 xrule_chart = (
                     alt.Chart(
                         pd.DataFrame({"On Air Date": [st.session_state["xrule_date"]]})
@@ -622,7 +636,8 @@ class ChartGenerator:
                     .mark_rule(color="#F7BB00", strokeWidth=4, strokeDash=[10, 5])
                     .encode(x="On Air Date:T")
                 )
-            sector_chart += xrule_chart
+                sector_chart += xrule_chart
+
             charts.append(sector_chart)
 
         combined_chart = (
@@ -642,7 +657,6 @@ class ChartGenerator:
                 padding=10,
                 titlePadding=10,
                 cornerRadius=10,
-                # strokeColor="#9A9A9A",
                 columns=6,
                 titleAnchor="start",
                 direction="vertical",
@@ -851,107 +865,160 @@ class ChartGenerator:
                 st.altair_chart(combined_chart, use_container_width=True)
 
     # TAG: - create_charts_vswr
+    # def create_charts_vswr(self, df, x1_param, x2_param, y_param, nename):
+    #     # Define color mapping
+    #     color_mapping = {
+    #         cell: color
+    #         for cell, color in zip(
+    #             df[x2_param].unique(),
+    #             self.get_colors(len(df[x2_param].unique())),
+    #         )
+    #     }
+
+    #     # Create baseline rule
+    #     baseline_value = 1.3
+    #     baseline = (
+    #         alt.Chart(pd.DataFrame({"baseline": [baseline_value]}))
+    #         .mark_rule(color="#F74B00", strokeDash=[8, 4], strokeWidth=4)
+    #         .encode(y="baseline:Q")
+    #     )
+
+    #     # Create main chart
+    #     bars = (
+    #         alt.Chart(df)
+    #         .mark_bar(size=10)  # Increased bar width
+    #         .encode(
+    #             x=alt.X(
+    #                 x1_param,
+    #                 type="ordinal",
+    #                 axis=alt.Axis(title="", labels=False),  # Show x-axis labels
+    #                 sort=alt.SortField(
+    #                     field=x1_param, order="ascending"
+    #                 ),  # Sort bars from left to right
+    #                 scale=alt.Scale(
+    #                     type="point", padding=0.1
+    #                 ),  # Adjust padding between bars
+    #             ),
+    #             y=alt.Y(
+    #                 y_param,
+    #                 type="quantitative",
+    #                 axis=alt.Axis(title=y_param),
+    #                 stack=None,  # Remove stacking to create unstacked bars
+    #             ),
+    #             color=alt.Color(
+    #                 x2_param,
+    #                 scale=alt.Scale(
+    #                     domain=list(color_mapping.keys()),
+    #                     range=list(color_mapping.values()),
+    #                 ),
+    #                 legend=alt.Legend(title=x2_param),
+    #             ),
+    #             tooltip=[x1_param, x2_param, y_param],
+    #         )
+    #         .properties(width=300, height=150)
+    #     )
+
+    #     # Create highlight chart for values above the baseline
+    #     highlight = bars.mark_bar(color="#e45755").transform_filter(
+    #         alt.datum[y_param] > baseline_value
+    #     )
+
+    #     # Combine charts and add facet for NE_NAME
+    #     base_chart = bars + highlight + baseline
+
+    #     # Configure facet, scale, and view
+    #     chart_with_facet_and_scale = (
+    #         base_chart.facet(
+    #             column=alt.Facet(nename, type="nominal", title=""),
+    #             spacing=0,  # Remove spacing between facets
+    #         )
+    #         .resolve_scale(
+    #             x="independent"
+    #         )  # Use independent x-axis scale for each facet
+    #         .configure_view(strokeWidth=0)
+    #     )
+
+    #     # Configure chart appearance
+    #     configured_chart = (
+    #         chart_with_facet_and_scale.configure(background="#F5F5F5")
+    #         .configure_title(
+    #             fontSize=18, anchor="middle", font="Vodafone", color="#717577"
+    #         )
+    #         .configure_legend(
+    #             orient="bottom",
+    #             titleFontSize=16,
+    #             labelFontSize=14,
+    #             labelFont="Vodafone",
+    #             titleColor="#5F6264",
+    #             padding=10,
+    #             titlePadding=10,
+    #             cornerRadius=10,
+    #             columns=6,
+    #             titleAnchor="start",
+    #             direction="vertical",
+    #             gradientLength=400,
+    #             labelLimit=0,
+    #             symbolSize=30,
+    #             symbolType="square",
+    #         )
+    #     )
+
+    #     container = st.container()
+    #     with container:
+    #         st.altair_chart(configured_chart, use_container_width=True)
     def create_charts_vswr(self, df, x1_param, x2_param, y_param, nename):
-        # Define color mapping
-        color_mapping = {
-            cell: color
-            for cell, color in zip(
-                df[x2_param].unique(),
-                self.get_colors(len(df[x2_param].unique())),
+        unique_values = df[x2_param].unique()
+        colors = self.get_colors(len(unique_values))
+        color_mapping = {cell: color for cell, color in zip(unique_values, colors)}
+
+        fig = go.Figure()
+
+        for value in unique_values:
+            filtered_df = df[df[x2_param] == value]
+            fig.add_trace(
+                go.Bar(
+                    x=filtered_df[x1_param],
+                    y=filtered_df[y_param],
+                    name=value,
+                    marker_color=color_mapping[value],
+                )
             )
-        }
 
-        # Create baseline rule
-        baseline_value = 1.3
-        baseline = (
-            alt.Chart(pd.DataFrame({"baseline": [baseline_value]}))
-            .mark_rule(color="#F74B00", strokeDash=[8, 4], strokeWidth=4)
-            .encode(y="baseline:Q")
-        )
-
-        # Create main chart
-        bars = (
-            alt.Chart(df)
-            .mark_bar(size=10)  # Increased bar width
-            .encode(
-                x=alt.X(
-                    x1_param,
-                    type="ordinal",
-                    axis=alt.Axis(title="", labels=False),  # Show x-axis labels
-                    sort=alt.SortField(
-                        field=x1_param, order="ascending"
-                    ),  # Sort bars from left to right
-                    scale=alt.Scale(
-                        type="point", padding=0.1
-                    ),  # Adjust padding between bars
-                ),
-                y=alt.Y(
-                    y_param,
-                    type="quantitative",
-                    axis=alt.Axis(title=y_param),
-                    stack=None,  # Remove stacking to create unstacked bars
-                ),
-                color=alt.Color(
-                    x2_param,
-                    scale=alt.Scale(
-                        domain=list(color_mapping.keys()),
-                        range=list(color_mapping.values()),
-                    ),
-                    legend=alt.Legend(title=x2_param),
-                ),
-                tooltip=[x1_param, x2_param, y_param],
+            fig.add_hline(
+                y=1.3,
+                line_color="red",
+                line_dash="dot",
+                annotation_text="",
+                annotation_position="bottom right",
+                annotation_font_size=20,
+                annotation_font_color="blue",
             )
-            .properties(width=300, height=150)
-        )
 
-        # Create highlight chart for values above the baseline
-        highlight = bars.mark_bar(color="#e45755").transform_filter(
-            alt.datum[y_param] > baseline_value
-        )
-
-        # Combine charts and add facet for NE_NAME
-        base_chart = bars + highlight + baseline
-
-        # Configure facet, scale, and view
-        chart_with_facet_and_scale = (
-            base_chart.facet(
-                column=alt.Facet(nename, type="nominal", title=""),
-                spacing=0,  # Remove spacing between facets
-            )
-            .resolve_scale(
-                x="independent"
-            )  # Use independent x-axis scale for each facet
-            .configure_view(strokeWidth=0)
-        )
-
-        # Configure chart appearance
-        configured_chart = (
-            chart_with_facet_and_scale.configure(background="#F5F5F5")
-            .configure_title(
-                fontSize=18, anchor="middle", font="Vodafone", color="#717577"
-            )
-            .configure_legend(
-                orient="bottom",
-                titleFontSize=16,
-                labelFontSize=14,
-                labelFont="Vodafone",
-                titleColor="#5F6264",
-                padding=10,
-                titlePadding=10,
-                cornerRadius=10,
-                columns=6,
-                titleAnchor="start",
-                direction="vertical",
-                gradientLength=400,
-                labelLimit=0,
-                symbolSize=30,
-                symbolType="square",
-            )
+        fig.update_layout(
+            barmode="group",
+            xaxis_title=x1_param,
+            yaxis_title=y_param,
+            plot_bgcolor="#F5F5F5",
+            paper_bgcolor="#F5F5F5",
+            font=dict(family="Vodafone", size=18, color="#717577"),
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="left",
+                x=0,
+                bgcolor="#F5F5F5",
+                bordercolor="#FFFFFF",
+                borderwidth=2,
+                itemclick="toggleothers",
+                itemdoubleclick="toggle",
+            ),
+            margin=dict(l=20, r=20, t=40, b=20),
         )
 
         container = st.container()
         with container:
-            st.altair_chart(configured_chart, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True)
 
 
 class App:
@@ -974,11 +1041,21 @@ class App:
 
         # Load sitelist
         script_dir = os.path.dirname(__file__)
+
         sitelist_path = os.path.join(script_dir, "test_sitelist.csv")
         sitelist = self.streamlit_interface.load_sitelist(sitelist_path)
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(os.path.dirname(current_dir))
+        assets_image = os.path.join(project_root, "assets/")
 
         # Site selection
-        col1, col2, col3, col4, _ = st.columns([1, 1, 1, 1, 3])
+        (
+            col1,
+            col2,
+            col3,
+            col4,
+            _,
+        ) = st.columns([1, 1, 1, 1, 3])
         with col1:
             date_range = self.streamlit_interface.select_date_range()
             st.session_state["date_range"] = date_range
@@ -1005,54 +1082,85 @@ class App:
 
                 # Fetch MCOM data
                 for siteid in selected_sites:
-                    site_path = os.path.join(script_dir, "sites", siteid)
+                    folder = os.path.join(project_root, "sites", siteid)
+                    # tier_path = os.path.join(folder, "tier.csv")
+                    # tier_data = pd.read_csv(tier_path)
+                    # isd_path = os.path.join(folder, "isd.csv")
+                    # isd_data = pd.read_csv(isd_path)
+                    # st.write(tier_data)
+                    # st.write(isd_data)
+
+                    sac.divider(color="black", align="center")
+                    col1, col2, _ = st.columns([1, 1, 5])
+
+                    with col1.container():
+                        with stylable_container(
+                            key="erilogo",
+                            css_styles="""
+                                img {
+                                    display: block;
+                                    margin-left: auto;
+                                    margin-right: auto;
+                                    width: 100%;
+                                    position: relative;
+                                    top: 5px;
+                                }
+                            """,
+                        ):
+                            st.image(assets_image + "eri.png")
+
+                    with col2.container():
+                        with stylable_container(
+                            key="tsellogo",
+                            css_styles="""
+                                img {
+                                    display: block;
+                                    margin-left: auto;
+                                    margin-right: auto;
+                                    width: 100%;
+                                    position: relative;
+                                    top: 0px;  /* Adjust this value as needed */
+                                }
+                            """,
+                        ):
+                            st.image(assets_image + "tsel.png")
+                    st.markdown("# ")
                     col1, col2 = st.columns([2, 1])
 
                     # TAG: NAURA and ALARM
-                    with col1:
-                        st.markdown(
-                            *styling(
-                                f"📝 Naura Site {siteid}",
-                                font_size=24,
-                                text_align="left",
-                                tag="h6",
+                    def display_image_or_message(
+                        column, folder_path, image_name, message_prefix
+                    ):
+                        image_path = os.path.join(folder_path, image_name)
+                        if os.path.exists(image_path):
+                            column.image(
+                                image_path, caption=None, use_column_width=True
                             )
-                        )
+                        else:
+                            column.write(f"{message_prefix}: {image_path}")
 
-                    with col2:
-                        st.markdown(
-                            *styling(
-                                f"⚠️ Alarm Site {siteid}",
-                                font_size=24,
-                                text_align="left",
-                                tag="h6",
-                            )
-                        )
-
+                    # Define columns first
                     col1, col2 = st.columns([2, 1])
+
+                    # Use the defined function to display styled markdowns
+                    styling_args = {"font_size": 24, "text_align": "left", "tag": "h6"}
+                    col1.markdown(*styling(f"📝 Naura Site {siteid}", **styling_args))
+                    col2.markdown(*styling(f"⚠️ Alarm Site {siteid}", **styling_args))
+
+                    # Create containers with borders
                     con1 = col1.container(border=True)
                     con2 = col2.container(border=True)
 
-                    with con1:
-                        if os.path.exists(site_path):
-                            naura = os.path.join(site_path, "naura.jpg")
-                            if os.path.exists(naura):
-                                st.image(naura, caption=None, use_column_width=True)
-                            else:
-                                st.write(f"Please upload the image: {naura}")
-                        else:
-                            st.write(f"Path does not exist: {site_path}")
-
-                    with con2:
-                        if os.path.exists(site_path):
-                            alarm = os.path.join(site_path, "alarm.jpg")
-
-                            if os.path.exists(alarm):
-                                st.image(alarm, caption=None, use_column_width=True)
-                            else:
-                                st.write(f"Please upload the image: {alarm}")
-                        else:
-                            st.write(f"Path does not exist: {site_path}")
+                    # Display images or messages using the helper function
+                    if os.path.exists(folder):
+                        display_image_or_message(
+                            con1, folder, "naura.jpg", "Please upload the image"
+                        )
+                        display_image_or_message(
+                            con2, folder, "alarm.jpg", "Please upload the image"
+                        )
+                    else:
+                        st.write(f"Path does not exist: {folder}")
 
                     mcom_data = self.query_manager.get_mcom_data(siteid)
                     self.dataframe_manager.add_dataframe(
@@ -1135,10 +1243,7 @@ class App:
                     # TAG: - Availability
                     st.markdown(
                         *styling(
-                            f"📶 Service Availability for Site {siteid}",
-                            font_size=24,
-                            text_align="left",
-                            tag="h6",
+                            f"📶 Service Availability for Site {siteid}", **styling_args
                         )
                     )
                     self.chart_generator.create_charts(
@@ -1149,19 +1254,15 @@ class App:
                         y_param="Availability",
                         sector_param="EutranCell",
                         yaxis_range=yaxis_ranges[0],
-                        xrule=True,  # Set this to False if you don't want the xrule
+                        xrule=True,
                     )
 
                     # TAG: - RRC Setup Success Rate
                     st.markdown(
                         *styling(
-                            f"📶 RRC Success Rate for Site {siteid}",
-                            font_size=24,
-                            text_align="left",
-                            tag="h6",
+                            f"📶 RRC Success Rate for Site {siteid}", **styling_args
                         )
                     )
-
                     self.chart_generator.create_charts_datums(
                         df=combined_target_ltedaily_df,
                         param="RRC Setup Success Rate",
@@ -1178,9 +1279,7 @@ class App:
                     st.markdown(
                         *styling(
                             f"📶 E-RAB Setup Success Rate for Site {siteid}",
-                            font_size=24,
-                            text_align="left",
-                            tag="h6",
+                            **styling_args,
                         )
                     )
 
@@ -1200,9 +1299,7 @@ class App:
                     st.markdown(
                         *styling(
                             f"📶 Session Setup Success Rate for Site {siteid}",
-                            font_size=24,
-                            text_align="left",
-                            tag="h6",
+                            **styling_args,
                         )
                     )
 
@@ -1222,9 +1319,7 @@ class App:
                     st.markdown(
                         *styling(
                             f"📶 Session Abnormal Release Sectoral for Site {siteid}",
-                            font_size=24,
-                            text_align="left",
-                            tag="h6",
+                            **styling_args,
                         )
                     )
 
@@ -1244,9 +1339,7 @@ class App:
                     st.markdown(
                         *styling(
                             f"📶 CQI Distribution (Non-Homogeneous) Sectoral for Site {siteid}",
-                            font_size=24,
-                            text_align="left",
-                            tag="h6",
+                            **styling_args,
                         )
                     )
 
@@ -1266,9 +1359,7 @@ class App:
                     st.markdown(
                         *styling(
                             f"📶 Spectral Efficiency Analysis Sectoral for Site {siteid}",
-                            font_size=24,
-                            text_align="left",
-                            tag="h6",
+                            **styling_args,
                         )
                     )
 
@@ -1288,9 +1379,7 @@ class App:
                     st.markdown(
                         *styling(
                             f"📶 Intra-Frequency Handover Performance Sectoral for Site {siteid} (%)",
-                            font_size=24,
-                            text_align="left",
-                            tag="h6",
+                            **styling_args,
                         )
                     )
 
@@ -1310,9 +1399,7 @@ class App:
                     st.markdown(
                         *styling(
                             f"📶 Inter-Frequency Handover Performance Sectoral for Site {siteid} (%)",
-                            font_size=24,
-                            text_align="left",
-                            tag="h6",
+                            **styling_args,
                         )
                     )
 
@@ -1332,9 +1419,7 @@ class App:
                     st.markdown(
                         *styling(
                             f"📶 Average UL RSSI Sectoral for Site {siteid} (dBm)",
-                            font_size=24,
-                            text_align="left",
-                            tag="h6",
+                            **styling_args,
                         )
                     )
 
@@ -1355,9 +1440,7 @@ class App:
                     st.markdown(
                         *styling(
                             f"📶 Throughput (Mbps) Sectoral for Site {siteid}",
-                            font_size=24,
-                            text_align="left",
-                            tag="h6",
+                            **styling_args,
                         )
                     )
 
@@ -1376,9 +1459,7 @@ class App:
                     st.markdown(
                         *styling(
                             f"📶 Payload Distribution Sectoral for Site {siteid} (Gpbs)",
-                            font_size=24,
-                            text_align="left",
-                            tag="h6",
+                            **styling_args,
                         )
                     )
 
@@ -1398,14 +1479,43 @@ class App:
                 )
                 self.dataframe_manager.add_dataframe("payload_data", payload_data)
 
+                ltehourly_data = self.query_manager.get_ltehourly_data(
+                    selected_sites, end_date
+                )
+
+                ltehourly_data["datetime"] = pd.to_datetime(
+                    ltehourly_data["DATE_ID"].astype(str)
+                    + " "
+                    + ltehourly_data["hour_id"].astype(str).str.zfill(2),
+                    format="%Y-%m-%d %H",
+                )
+
+                ltebusyhour_data = self.query_manager.get_busyhour(
+                    selected_sites, end_date
+                )
+                self.dataframe_manager.add_dataframe(
+                    "ltebusyhour_data", ltebusyhour_data
+                )
+
+                self.dataframe_manager.add_dataframe("ltehourly_data", ltehourly_data)
+
+                vswr_data = self.query_manager.get_vswr_data(selected_sites, end_date)
+                self.dataframe_manager.add_dataframe("vswr_data", vswr_data)
+
+                # MARK: - GeoApp MDT Data
+                st.session_state.mcom_data = mcom_data
+                st.session_state.combined_target_data = combined_target_data
+
+                # MARK: - GeoApp MDT Data
+                ltemdtdata = self.query_manager.get_ltemdt_data(selected_sites)
+                self.dataframe_manager.add_dataframe("ltemdtdata", ltemdtdata)
+
                 col1, col2 = st.columns([1, 1])
                 with col1:
                     st.markdown(
                         *styling(
                             f"📶 Payload Distribution by Frequency for Site  {siteid} (Gpbs)",
-                            font_size=24,
-                            text_align="left",
-                            tag="h6",
+                            **styling_args,
                         )
                     )
 
@@ -1413,9 +1523,7 @@ class App:
                     st.markdown(
                         *styling(
                             f"📶 Total Site Payload Overview for Site {siteid} (Gpbs)",
-                            font_size=24,
-                            text_align="left",
-                            tag="h6",
+                            **styling_args,
                         )
                     )
                 # TAG: - Payload Neid
@@ -1471,42 +1579,26 @@ class App:
                 st.markdown(
                     *styling(
                         f"📶 CQI Comparison across Frequencies for Site {siteid}",
-                        font_size=24,
-                        text_align="left",
-                        tag="h6",
+                        **styling_args,
                     )
                 )
 
                 self.chart_generator.create_charts(
-                    df=payload_data,
+                    df=ltebusyhour_data,
                     param="CQI Overlay",
                     site="Combined Sites",
                     x_param="DATE_ID",
-                    y_param="CQI Bh",
-                    sector_param="EutranCell",
+                    y_param="CQI",
+                    sector_param="EUtranCellFDD",
                     yaxis_range=None,
+                    xrule=True,
                 )
-
-                ltehourly_data = self.query_manager.get_ltehourly_data(
-                    selected_sites, end_date
-                )
-
-                ltehourly_data["datetime"] = pd.to_datetime(
-                    ltehourly_data["DATE_ID"].astype(str)
-                    + " "
-                    + ltehourly_data["hour_id"].astype(str).str.zfill(2),
-                    format="%Y-%m-%d %H",
-                )
-
-                self.dataframe_manager.add_dataframe("ltehourly_data", ltehourly_data)
 
                 # TAG: - PRB & Active User
                 st.markdown(
                     *styling(
                         f"📶 PRB Utilization Sectoral for Site {siteid}",
-                        font_size=24,
-                        text_align="left",
-                        tag="h6",
+                        **styling_args,
                     )
                 )
                 self.chart_generator.create_charts(
@@ -1522,9 +1614,7 @@ class App:
                 st.markdown(
                     *styling(
                         f"📶 Active User Sectoral for {siteid}",
-                        font_size=24,
-                        text_align="left",
-                        tag="h6",
+                        **styling_args,
                     )
                 )
                 self.chart_generator.create_charts(
@@ -1537,17 +1627,15 @@ class App:
                     yaxis_range=None,
                 )
                 # Fetch VSWR data
-                vswr_data = self.query_manager.get_vswr_data(selected_sites, end_date)
-                self.dataframe_manager.add_dataframe("vswr_data", vswr_data)
+
                 # TAG: - VSWR
                 col1, col2 = st.columns([2, 1])
+
                 with col1:
                     st.markdown(
                         *styling(
                             f"📶 VSWR Analysis for Site {siteid} (dBm)",
-                            font_size=24,
-                            text_align="left",
-                            tag="h6",
+                            **styling_args,
                         )
                     )
 
@@ -1555,20 +1643,27 @@ class App:
                     st.markdown(
                         *styling(
                             f"📶 RET After {siteid}",
-                            font_size=24,
-                            text_align="left",
-                            tag="h6",
+                            **styling_args,
                         )
                     )
 
                 col1, col2 = st.columns([2, 1])
                 con1 = col1.container()
-                con2 = col1.container()
+                con2 = col2.container()
                 with con1:
                     with stylable_container(
                         key="container_with_border",
                         css_styles="""
-                        {
+
+                        img {
+                            display: block;
+                            margin-left: auto;
+                            margin-right: auto;
+                            width: 80%;
+                            position: relative;
+                            top: 0px;  /* Adjust this value as needed */
+                        }
+                        container {
                             background-color: #F5F5F5;
                             border: 2px solid rgba(49, 51, 63, 0.2);
                             border-radius: 0.5rem;
@@ -1585,29 +1680,40 @@ class App:
                         )
 
                 with con2:
-                    if os.path.exists(site_path):
-                        vswr = os.path.join(site_path, "vswr.jpg")
-                        if os.path.exists(vswr):
-                            st.image(vswr, caption=None, use_column_width=True)
+                    with stylable_container(
+                        key="container_with_border",
+                        css_styles="""
+                        img {
+                            display: block;
+                            margin-left: auto;
+                            margin-right: auto;
+                            width: 100%;
+                            max-width: 100%;
+                            position: relative;
+                            top: 0px;
+                        }
+                        .custom-container {
+                            background-color: #F5F5F5;
+                            border: 2px solid rgba(49, 51, 63, 0.2);
+                            border-radius: 0.5rem;
+                            padding: calc(1em - 1px);
+                        }
+                        """,
+                    ):
+                        if os.path.exists(folder):
+                            ret = os.path.join(folder, "ret.jpg")
+                            if os.path.exists(ret):
+                                st.image(ret, caption=None)
+                            else:
+                                st.write(f"Please upload the image: {ret}")
                         else:
-                            st.write(f"Please upload the image: {vswr}")
-                    else:
-                        st.write(f"Path does not exist: {site_path}")
+                            st.write(f"Path does not exist: {folder}")
 
-                # MARK: - GeoApp MDT Data
-                st.session_state.mcom_data = mcom_data
-                st.session_state.combined_target_data = combined_target_data
-
-                # MARK: - GeoApp MDT Data
-                ltemdtdata = self.query_manager.get_ltemdt_data(selected_sites)
-                self.dataframe_manager.add_dataframe("ltemdtdata", ltemdtdata)
                 st.session_state.ltemdtdata = ltemdtdata
                 st.markdown(
                     *styling(
                         f"☢️ MDT and TA Summary for Site {siteid}",
-                        font_size=24,
-                        text_align="left",
-                        tag="h6",
+                        **styling_args,
                     )
                 )
                 self.geodata = GeoApp(mcom_data, ltemdtdata)

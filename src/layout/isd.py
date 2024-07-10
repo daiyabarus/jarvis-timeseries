@@ -236,7 +236,7 @@ class NeighborSectors:
                     target_beam,
                 )
 
-                if remark == "Head to Head":
+                if remark == "head_to_head":
                     neighbors.append(
                         {
                             "siteid": source_row["Site_ID"],
