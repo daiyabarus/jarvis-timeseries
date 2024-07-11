@@ -1,3 +1,4 @@
+# geo_app.py
 import folium
 import streamlit as st
 from branca.element import MacroElement, Template
@@ -12,6 +13,7 @@ class GeoApp:
         self.map_center = self.calculate_map_center()
         self.tile_options = self.define_tile_options()
         self.map = None
+        self.ci_colors = self.assign_ci_colors()
 
     def get_unique_cis(self):
         """Extract and sort unique Cell IDs."""
@@ -52,14 +54,17 @@ class GeoApp:
             attr=tile_provider,
         )
 
+    def assign_ci_colors(self):
+        """Assign colors to unique Cell IDs."""
+        ci_colors = {}
+        for index, ci in enumerate(self.unique_cis):
+            color = ColorPalette.get_color(index)
+            ci_colors[ci] = color
+        return ci_colors
+
     def get_ci_color(self, ci):
-        """Get color based on Cell ID index."""
-        try:
-            ci_index = self.unique_cis.index(ci)
-            return ColorPalette.get_color(ci_index)
-        except ValueError:
-            st.error(f"CI {ci} is not in the mcom Database, Please update the Data.")
-            return "black"
+        """Get color based on Cell ID."""
+        return self.ci_colors.get(ci, "black")
 
     def get_rsrp_color(self, rsrp):
         """Determines the color representation based on the RSRP value."""
@@ -205,8 +210,7 @@ class GeoApp:
 
     def display_legend(self):
         st.subheader("Legend")
-        for index, ci in enumerate(self.unique_cis):
-            color = ColorPalette.get_color(index)
+        for ci, color in self.ci_colors.items():
             st.markdown(
                 f'<span style="color:{color};">{ci}: {color}</span>',
                 unsafe_allow_html=True,
@@ -231,8 +235,7 @@ class GeoApp:
           <ul class='legend-labels'>
             <li><strong>CELL IDENTITY</strong></li>
         """
-        for index, ci in enumerate(self.unique_cis):
-            color = ColorPalette.get_color(index)
+        for ci, color in self.ci_colors.items():
             combined_legend_template += f"<li><span style='background: {color}; opacity: 0.75;'></span>CI {ci}</li>"
 
         combined_legend_template += """
