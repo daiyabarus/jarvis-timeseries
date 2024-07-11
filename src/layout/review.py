@@ -944,7 +944,7 @@ class ChartGenerator:
 
         fig.update_layout(
             barmode="group",
-            xaxis_title=x1_param,
+            # xaxis_title=x1_param,
             yaxis_title=y_param,
             plot_bgcolor="#F5F5F5",
             paper_bgcolor="#F5F5F5",
@@ -958,7 +958,7 @@ class ChartGenerator:
                 x=0,
                 bgcolor="#F5F5F5",
                 bordercolor="#FFFFFF",
-                borderwidth=2,
+                borderwidth=0,
                 itemclick="toggleothers",
                 itemdoubleclick="toggle",
             ),
@@ -1021,7 +1021,7 @@ class ChartGenerator:
                     hoverlabel=dict(bgcolor="white", font=dict(color="black")),
                     text=[""] * (len(baseline_chart1) - 5) + [f"{cellname}"],
                     textposition="top center",
-                    textfont=dict(size=18, color=color),
+                    textfont=dict(size=10, color=color),
                 ),
                 row=1,
                 col=i + 1,
@@ -1056,7 +1056,7 @@ class ChartGenerator:
                         hoverlabel=dict(bgcolor="white", font=dict(color="black")),
                         text=[""] * (len(tier_value) - 5) + [f"{adjcellname}"],
                         textposition="top center",
-                        textfont=dict(size=18, color=color),
+                        textfont=dict(size=10, color=color),
                     ),
                     row=1,
                     col=i + 1,
@@ -1088,6 +1088,7 @@ class ChartGenerator:
                 bordercolor="#F5F5F5",
                 itemclick="toggleothers",
                 itemdoubleclick="toggle",
+                font=dict(size=20),
             ),
         )
 
@@ -1103,6 +1104,81 @@ class ChartGenerator:
                 """,
         ):
             # Display the chart in Streamlit
+            container = st.container()
+            with container:
+                st.plotly_chart(fig, use_container_width=True)
+
+    # TODO: - create_charts_tastate
+    def create_charts_tastate(self, df):
+        # Select the specific headers for plotting
+        plot_columns = [
+            "perc_300",
+            "perc_500",
+            "perc_700",
+            "perc_1000",
+            "perc_1500",
+            "perc_2000",
+            "perc_3000",
+            "perc_5000",
+            "perc_10000",
+            "perc_15000",
+            "perc_30000",
+        ]
+        df = df[["Cell_Name"] + plot_columns]
+
+        x_values = plot_columns
+        unique_values = df["Cell_Name"].unique()
+        colors = self.get_colors(len(unique_values))
+        # color_mapping = {cell: color for cell, color in zip(unique_values, colors)}
+
+        fig = go.Figure()
+
+        for cell in unique_values:
+            filtered_df = df[df["Cell_Name"] == cell]
+            fig.add_trace(
+                go.Bar(
+                    x=x_values,
+                    y=filtered_df.loc[:, x_values].values[0],
+                    name=cell,
+                    # marker_color=color_mapping[cell],
+                    # text=[cell] * len(x_values),
+                    # textposition="auto",
+                )
+            )
+
+        fig.update_layout(
+            barmode="group",
+            xaxis_title="",
+            yaxis_title="TOTAL",
+            plot_bgcolor="#F5F5F5",
+            paper_bgcolor="#F5F5F5",
+            height=715,
+            font=dict(family="Vodafone", size=25, color="#717577"),
+            legend=dict(
+                orientation="h",
+                yanchor="top",
+                y=-0.4,
+                xanchor="center",
+                x=0.5,
+                bgcolor="#F5F5F5",
+                bordercolor="#F5F5F5",
+                itemclick="toggleothers",
+                itemdoubleclick="toggle",
+                font=dict(size=20),
+            ),
+            margin=dict(l=20, r=20, t=40, b=20),
+        )
+        with stylable_container(
+            key="container_with_border",
+            css_styles="""
+                {
+                    background-color: #F5F5F5;
+                    border: 2px solid rgba(49, 51, 63, 0.2);
+                    border-radius: 0.5rem;
+                    padding: calc(1em - 1px)
+                }
+                """,
+        ):
             container = st.container()
             with container:
                 st.plotly_chart(fig, use_container_width=True)
@@ -1294,6 +1370,7 @@ class App:
                     self.dataframe_manager.add_dataframe(
                         f"mcom_data_{siteid}", mcom_data
                     )
+                    # st.write(mcom_data)
 
                     for _, row in mcom_data.iterrows():
                         target_data = self.query_manager.get_target_data(
@@ -1303,7 +1380,6 @@ class App:
                         )
                         target_data["EutranCell"] = row["Cell_Name"]
                         combined_target_data.append(target_data)
-                        # st.write(target_data)
 
                     # Fetch LTE daily data for each site
                     ltedaily_data = self.query_manager.get_ltedaily_data(
@@ -1653,14 +1729,6 @@ class App:
                 vswr_data = self.query_manager.get_vswr_data(selected_sites, end_date)
                 self.dataframe_manager.add_dataframe("vswr_data", vswr_data)
 
-                # MARK: - GeoApp MDT Data
-                st.session_state.mcom_data = mcom_data
-                st.session_state.combined_target_data = combined_target_data
-
-                # MARK: - GeoApp MDT Data
-                ltemdtdata = self.query_manager.get_ltemdt_data(selected_sites)
-                self.dataframe_manager.add_dataframe("ltemdtdata", ltemdtdata)
-
                 col1, col2 = st.columns([1, 1])
                 with col1:
                     st.markdown(
@@ -1843,7 +1911,7 @@ class App:
                             display: block;
                             margin-left: auto;
                             margin-right: auto;
-                            width: 80%;
+                            width: 100%;
                             position: relative;
                             top: 0px;  /* Adjust this value as needed */
                         }
@@ -1872,7 +1940,7 @@ class App:
                             margin-left: auto;
                             margin-right: auto;
                             width: 100%;
-                            max-width: 100%;
+                            max-width: 80%;
                             position: relative;
                             top: 0px;
                         }
@@ -1887,63 +1955,120 @@ class App:
                         if os.path.exists(folder):
                             ret = os.path.join(folder, "ret.jpg")
                             if os.path.exists(ret):
-                                st.image(ret, caption=None)
+                                st.image(ret, caption=None, use_column_width=True)
                             else:
                                 st.write(f"Please upload the image: {ret}")
                         else:
                             st.write(f"Path does not exist: {folder}")
 
+                # MARK: - GeoApp MDT Data
+                mcom_data1 = self.query_manager.get_mcom_data(siteid)
+                st.session_state.mcom_data1 = mcom_data1
+                st.session_state.combined_target_data = combined_target_data
+                required_columns = [
+                    "Site_ID",
+                    "NODE_ID",
+                    "NE_ID",
+                    "Cell_Name",
+                    "Longitude",
+                    "Latitude",
+                    "Dir",
+                    "Ant_BW",
+                    "Ant_Size",
+                    "cellId",
+                    "eNBId",
+                    "MC_class",
+                    "KABUPATEN",
+                    "LTE",
+                ]
+                if not all(column in mcom_data.columns for column in required_columns):
+                    raise ValueError(
+                        "The dataframe does not contain all required columns"
+                    )
+
+                self.dataframe_manager.add_dataframe(f"mcom_data_{siteid}", mcom_data)
+
+                if isinstance(selected_neids, list):
+                    selected_neids = selected_neids[0]
+
+                if isinstance(selected_neids, str):
+                    ltemcomdata = mcom_data[mcom_data["NE_ID"] == selected_neids]
+                else:
+                    raise ValueError(
+                        "selected_neid should be a string or a list containing a string"
+                    )
+
+                # MARK: - GeoApp MDT Data
+                ltemdtdata = self.query_manager.get_ltemdt_data(selected_sites)
+                self.dataframe_manager.add_dataframe("ltemdtdata", ltemdtdata)
+                ltemcomdata["eNBId"] = ltemcomdata["eNBId"].astype(float)
+                ltemcomdata["cellId"] = ltemcomdata["cellId"].astype(float)
+                ltemdtdata["enodebid"] = ltemdtdata["enodebid"].astype(float)
+                ltemdtdata["ci"] = ltemdtdata["ci"].astype(float)
+
+                filter_set = set(zip(ltemcomdata["eNBId"], ltemcomdata["cellId"]))
+
+                ltemdtdata_final = ltemdtdata[
+                    ltemdtdata[["enodebid", "ci"]].apply(tuple, axis=1).isin(filter_set)
+                ]
+
                 # TODO: mcom and ta state
                 mcom_ta = self.query_manager.get_mcom_tastate(selected_neids)
                 self.dataframe_manager.add_dataframe("mcom_ta", mcom_ta)
-                # st.write(mcom_ta)
+                st.write(mcom_ta)
 
-                # Use the correct column names from the ltetastate DataFrame
                 ltetastate_data = self.query_manager.get_ltetastate_data(selected_sites)
                 self.dataframe_manager.add_dataframe("ltetastate_data", ltetastate_data)
-                # st.write(ltetastate_data)
                 mcom_ta["cellId"] = mcom_ta["cellId"].astype(float)
                 mcom_ta["eNBId"] = mcom_ta["eNBId"].astype(float)
                 ltetastate_data["ci"] = ltetastate_data["ci"].astype(float)
                 ltetastate_data["enodebid"] = ltetastate_data["enodebid"].astype(float)
 
-                # Rename columns to match for merging
                 mcom_ta_renamed = mcom_ta.rename(
                     columns={"cellId": "ci", "eNBId": "enodebid"}
                 )
 
-                # Set the index to 'ci' and 'enodebid' for both DataFrames
                 mcom_ta_indexed = mcom_ta_renamed.set_index(["ci", "enodebid"])
                 ltetastate_data_indexed = ltetastate_data.set_index(["ci", "enodebid"])
 
-                # Concatenate the DataFrames along the columns axis
-                merged_df = pd.merge(
+                tastate_data = pd.merge(
                     mcom_ta_indexed,
                     ltetastate_data_indexed,
                     on=["ci", "enodebid"],
                     how="inner",
                 )
 
-                # Add the merged DataFrame to the dataframe manager and display it
-                self.dataframe_manager.add_dataframe("merged_df", merged_df)
-                st.write(merged_df)
-
-                st.session_state.ltemdtdata = ltemdtdata
-                st.markdown(
-                    *styling(
-                        f"☢️ MDT and TA Summary for Site {siteid}",
-                        font_size=24,
-                        text_align="left",
-                        tag="h6",
+                self.dataframe_manager.add_dataframe("tastate_data", tastate_data)
+                col1, col2 = st.columns([3, 2])
+                con1 = col1.container()
+                con2 = col2.container()
+                st.session_state.ltemdtdata_final = ltemdtdata_final
+                with con1:
+                    st.markdown(
+                        *styling(
+                            f"☢️ MDT for Site {siteid}",
+                            font_size=24,
+                            text_align="left",
+                            tag="h6",
+                        )
                     )
-                )
-                self.geodata = GeoApp(mcom_data, ltemdtdata)
-                self.geodata.run_geo_app()
+                    self.geodata = GeoApp(ltemcomdata, ltemdtdata_final)
+                    self.geodata.run_geo_app()
+                with con2:
+                    st.markdown(*styling(" "))
+                    st.markdown(
+                        *styling(
+                            f"📶 TA State for Site {siteid}",
+                            font_size=24,
+                            text_align="center",
+                            tag="h4",
+                        )
+                    )
+                    self.chart_generator.create_charts_tastate(tastate_data)
 
                 # MARK: - MCOM ISD Data
                 session.close()
         else:
-            # If not running the query, reload the data from session state
             if "mcom_data" in st.session_state and "ltemdtdata" in st.session_state:
                 self.geodata = GeoApp(
                     st.session_state.mcom_data, st.session_state.ltemdtdata

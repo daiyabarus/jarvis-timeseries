@@ -274,20 +274,14 @@ class GeoApp:
                 st.session_state.category = category
                 st.experimental_rerun()
 
-        col1, col2, col3 = st.columns([3, 1, 1])
+            # col1, _, _ = st.columns(3)
 
-        with col1:
-            self.add_geocell_layer()
-            color_by_ci = "CellId" in category
-            self.add_driveless_layer(color_by_ci=color_by_ci)
+            # with col1:
+        self.add_geocell_layer()
+        color_by_ci = "CellId" in category
+        self.add_driveless_layer(color_by_ci=color_by_ci)
 
-            if "Spidergraph" in category:
-                self.add_spider_graph()
+        if "Spidergraph" in category:
+            self.add_spider_graph()
 
-            self.display_map()
-
-        with col2:
-            st.markdown("📡 --- 📡")
-
-        with col3:
-            st.markdown("📡 --- 📡")
+        self.display_map()

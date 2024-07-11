@@ -191,36 +191,29 @@ class NeighborSectors:
         filtered_data = self.data[self.data["NE_ID"] == neid]
         neighbors = []
 
-        seen_pairs = set()  # Keep track of processed pairs to avoid duplicates
-
         for _, source_row in filtered_data.iterrows():
-            source_lat, source_lon, source_dir, source_lte, source_beam = (
+            source_lat, source_lon, source_dir, source_lte = (
                 source_row["Latitude"],
                 source_row["Longitude"],
                 source_row["Dir"],
                 source_row["LTE"],
-                self.beamwidth,
             )
             lte_filtered_data = self.data[self.data["LTE"] == source_lte]
 
+            potential_neighbors = []
             for _, target_row in lte_filtered_data.iterrows():
                 if source_row["Cell_Name"] == target_row["Cell_Name"]:
                     continue
 
-                target_lat, target_lon, target_dir, target_beam = (
+                target_lat, target_lon, target_dir = (
                     target_row["Latitude"],
                     target_row["Longitude"],
                     target_row["Dir"],
-                    self.beamwidth,
                 )
                 distance = self.calculate_distance(
                     source_lat, source_lon, target_lat, target_lon
                 )
                 if distance <= self.min_distance or distance > self.max_distance:
-                    continue
-
-                pair = (source_row["Cell_Name"], target_row["Cell_Name"])
-                if pair in seen_pairs:
                     continue
 
                 bearing_from_source = self.calculate_bearing(
@@ -231,13 +224,13 @@ class NeighborSectors:
                 remark = self.calculate_remark(
                     bearing_from_source,
                     source_dir,
-                    source_beam,
+                    self.beamwidth,
                     target_dir,
-                    target_beam,
+                    self.beamwidth,
                 )
 
                 if remark == "head_to_head":
-                    neighbors.append(
+                    potential_neighbors.append(
                         {
                             "siteid": source_row["Site_ID"],
                             "neid": source_row["NE_ID"],
@@ -251,7 +244,10 @@ class NeighborSectors:
                         }
                     )
 
-                seen_pairs.add(pair)
+            potential_neighbors = sorted(
+                potential_neighbors, key=lambda x: x["distance"]
+            )[:3]
+            neighbors.extend(potential_neighbors)
 
         return pd.DataFrame(neighbors)
 
