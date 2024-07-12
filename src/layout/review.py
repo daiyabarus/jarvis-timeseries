@@ -195,7 +195,8 @@ class QueryManager:
 
         return self.fetch_data(query, params=params)
 
-    def get_ltehourly_data(self, selected_sites, end_date):
+    @st.cache_data(ttl=600)
+    def get_ltehourly_data(_self, selected_sites, end_date):
         like_conditions = " OR ".join(
             [f'"EUtranCellFDD" LIKE :site_{i}' for i in range(len(selected_sites))]
         )
@@ -216,7 +217,7 @@ class QueryManager:
         params = {f"site_{i}": f"%{site}%" for i, site in enumerate(selected_sites)}
         params.update({"start_date": start_date, "end_date": end_date})
 
-        return self.fetch_data(query, params=params)
+        return _self.fetch_data(query, params=params)
 
     def get_target_data(self, city, mc_class, band):
         # def get_target_data(self, city, band):
@@ -233,7 +234,8 @@ class QueryManager:
             {"city": city, "mc_class": mc_class, "band": band},
         )
 
-    def get_ltemdt_data(self, selected_sites):
+    @st.cache_data(ttl=600)
+    def get_ltemdt_data(_self, selected_sites):
         like_conditions = " OR ".join(
             [f'"site" LIKE :site_{i}' for i in range(len(selected_sites))]
         )
@@ -254,10 +256,11 @@ class QueryManager:
         """
         )
         params = {f"site_{i}": f"%{site}%" for i, site in enumerate(selected_sites)}
-        return self.fetch_data(query, params=params)
+        return _self.fetch_data(query, params=params)
 
     # TODO: - Create query for ta-state
-    def get_ltetastate_data(self, siteid):
+    @st.cache_data(ttl=600)
+    def get_ltetastate_data(_self, siteid):
         like_conditions = " OR ".join(
             [f'"site" LIKE :site_{i}' for i in range(len(siteid))]
         )
@@ -271,7 +274,7 @@ class QueryManager:
         )
 
         params = {f"site_{i}": f"%{site}%" for i, site in enumerate(siteid)}
-        return self.fetch_data(query, params=params)
+        return _self.fetch_data(query, params=params)
 
     def get_mcom_tastate(self, selected_neids):
         like_conditions = " OR ".join(
@@ -1129,7 +1132,7 @@ class ChartGenerator:
         x_values = plot_columns
         unique_values = df["Cell_Name"].unique()
         colors = self.get_colors(len(unique_values))
-        # color_mapping = {cell: color for cell, color in zip(unique_values, colors)}
+        color_mapping = {cell: color for cell, color in zip(unique_values, colors)}
 
         fig = go.Figure()
 
@@ -1140,7 +1143,7 @@ class ChartGenerator:
                     x=x_values,
                     y=filtered_df.loc[:, x_values].values[0],
                     name=cell,
-                    # marker_color=color_mapping[cell],
+                    marker_color=color_mapping[cell],
                     # text=[cell] * len(x_values),
                     # textposition="auto",
                 )
@@ -1152,12 +1155,12 @@ class ChartGenerator:
             yaxis_title="TOTAL",
             plot_bgcolor="#F5F5F5",
             paper_bgcolor="#F5F5F5",
-            height=715,
+            height=500,
             font=dict(family="Vodafone", size=25, color="#717577"),
             legend=dict(
                 orientation="h",
                 yanchor="top",
-                y=-0.4,
+                y=-0.3,
                 xanchor="center",
                 x=0.5,
                 bgcolor="#F5F5F5",
@@ -1259,6 +1262,98 @@ class App:
                         tier_data = None
                     return tier_data
 
+                def load_isd_data(isd_path):
+                    try:
+                        isd_data = pd.read_csv(isd_path)
+                        st.write("Successfully loaded isd.csv")
+                    except FileNotFoundError:
+                        st.error(f"File does not exist: {isd_path}")
+                        isd_data = None
+                    except pd.errors.EmptyDataError:
+                        st.write(f"The file {isd_path} is empty.")
+                        isd_data = None
+                    except Exception as e:
+                        st.write(f"An error occurred while reading {isd_path}: {e!s}")
+                        isd_data = None
+                    return isd_data
+
+                def calculate_rf(df_isd_data, df_tastate_data):
+                    try:
+                        # Perform arithmetic operations
+                        df_isd_data["ta_overshoot"] = df_isd_data["isd"] + (
+                            0.1 * df_isd_data["isd"]
+                        )
+                        df_isd_data["ta_undershoot"] = df_isd_data["isd"] / 3
+                        df_isd_data["ta_overlap"] = df_isd_data["isd"] / 2 + (
+                            0.2 * df_isd_data["isd"]
+                        )
+
+                        # Merge the dataframes
+                        df_merged = pd.merge(
+                            df_isd_data,
+                            df_tastate_data,
+                            left_on=["ci", "enbid"],
+                            right_on=["ci", "enodebid"],
+                        )
+
+                        # Apply conditional logic for 'final_ta_status'
+                        conditions = [
+                            (df_merged["isd"] > 5),
+                            (df_merged["perc90_ta_distance_km"] > df_merged["isd"]),
+                            (
+                                df_merged["perc90_ta_distance_km"]
+                                < 0.5 * df_merged["isd"]
+                            ),
+                            (
+                                df_merged["perc90_ta_distance_km"]
+                                > 0.5 * df_merged["ta_overlap"]
+                            ),
+                            (
+                                df_merged["perc90_ta_distance_km"]
+                                == 0.5 * df_merged["ta_overlap"]
+                            ),
+                        ]
+
+                        choices = [
+                            "📐 Open Area",
+                            "📈 TA Overshoot",
+                            "📉 TA Undershoot",
+                            "❌ TA Overlap",
+                            "✔️ TA Proper",
+                        ]
+
+                        df_merged["final_ta_status"] = np.select(
+                            conditions, choices, default="Open Area"
+                        )
+
+                        # Select final columns
+                        final_df = df_merged[
+                            [
+                                "siteid",
+                                "neid",
+                                "eutrancell",
+                                "isd",
+                                "ta_overshoot",
+                                "ta_undershoot",
+                                "ta_overlap",
+                                "final_ta_status",
+                            ]
+                        ]
+
+                        return final_df
+
+                    except Exception as e:
+                        print(f"An error occurred: {e}")
+                        return None
+
+                # Example usage
+                isd_data_path = "path_to_isd_data.csv"
+                tastate_data_path = "path_to_tastate_data.csv"
+
+                result = calculate_rf(isd_data_path, tastate_data_path)
+                if result is not None:
+                    print(result)
+
                 # Define a function to display images or messages
                 def display_image_or_message(
                     column, folder_path, image_name, message_prefix
@@ -1283,12 +1378,21 @@ class App:
                 for siteid in selected_sites:
                     folder = os.path.join(project_root, "sites", siteid)
                     tier_path = os.path.join(folder, "tier.csv")
+                    isd_path = os.path.join(folder, "isd.csv")
 
                     if os.path.exists(folder):
                         tier_data = load_tier_data(tier_path)
                     else:
                         st.write(f"Folder does not exist: {folder}")
                         tier_data = None
+
+                    if os.path.exists(folder):
+                        isd_data = load_isd_data(isd_path)
+                    else:
+                        st.write(f"Folder does not exist: {folder}")
+                        isd_data = None
+
+                    # st.write(f"ISD data: {isd_data}")
 
                     if tier_data is not None:
                         unique_eutrancellfdd = sorted(
@@ -1998,6 +2102,9 @@ class App:
                         "selected_neid should be a string or a list containing a string"
                     )
 
+                # st.write("LTE MCOM DATA")
+                # st.write(ltemcomdata)
+
                 # MARK: - GeoApp MDT Data
                 ltemdtdata = self.query_manager.get_ltemdt_data(selected_sites)
                 self.dataframe_manager.add_dataframe("ltemdtdata", ltemdtdata)
@@ -2011,26 +2118,33 @@ class App:
                 ltemdtdata_final = ltemdtdata[
                     ltemdtdata[["enodebid", "ci"]].apply(tuple, axis=1).isin(filter_set)
                 ]
+                # st.write("LTE MDT DATA FINAL")
+                # st.write(ltemdtdata_final)
 
                 # TODO: mcom and ta state
                 mcom_ta = self.query_manager.get_mcom_tastate(selected_neids)
                 self.dataframe_manager.add_dataframe("mcom_ta", mcom_ta)
-                st.write(mcom_ta)
+                # st.write("MCOM TA")
+                # st.write(mcom_ta)
+                # st.write(mcom_ta)
 
                 ltetastate_data = self.query_manager.get_ltetastate_data(selected_sites)
                 self.dataframe_manager.add_dataframe("ltetastate_data", ltetastate_data)
-                mcom_ta["cellId"] = mcom_ta["cellId"].astype(float)
-                mcom_ta["eNBId"] = mcom_ta["eNBId"].astype(float)
+                ltemcomdata["cellId"] = ltemcomdata["cellId"].astype(float)
+                ltemcomdata["eNBId"] = ltemcomdata["eNBId"].astype(float)
                 ltetastate_data["ci"] = ltetastate_data["ci"].astype(float)
                 ltetastate_data["enodebid"] = ltetastate_data["enodebid"].astype(float)
 
-                mcom_ta_renamed = mcom_ta.rename(
+                mcom_ta_renamed = ltemcomdata.rename(
                     columns={"cellId": "ci", "eNBId": "enodebid"}
                 )
 
                 mcom_ta_indexed = mcom_ta_renamed.set_index(["ci", "enodebid"])
+                # st.write("mcom_ta_indexed")
+                # st.write(mcom_ta_indexed)
                 ltetastate_data_indexed = ltetastate_data.set_index(["ci", "enodebid"])
-
+                # st.write("ltetastate_data_indexed")
+                # st.write(ltetastate_data_indexed)
                 tastate_data = pd.merge(
                     mcom_ta_indexed,
                     ltetastate_data_indexed,
@@ -2038,11 +2152,18 @@ class App:
                     how="inner",
                 )
 
+                # MARK: use this to calculate RF Propagation
+                # st.write("TA STATE DATA")
+                # st.write(tastate_data)
+                # st.write(isd_data)
+
+                # st.write(tafinal)
                 self.dataframe_manager.add_dataframe("tastate_data", tastate_data)
                 col1, col2 = st.columns([3, 2])
                 con1 = col1.container()
                 con2 = col2.container()
                 st.session_state.ltemdtdata_final = ltemdtdata_final
+                st.session_state.ltemcomdata = ltemdtdata_final
                 with con1:
                     st.markdown(
                         *styling(
@@ -2060,13 +2181,364 @@ class App:
                         *styling(
                             f"📶 TA State for Site {siteid}",
                             font_size=24,
-                            text_align="center",
+                            text_align="left",
                             tag="h4",
                         )
                     )
                     self.chart_generator.create_charts_tastate(tastate_data)
+                    st.markdown(
+                        *styling(
+                            f"📶 TA Remark for Site {siteid}",
+                            font_size=24,
+                            text_align="left",
+                            tag="h4",
+                        )
+                    )
+                    tafinal = calculate_rf(isd_data, tastate_data)
+                    st.table(tafinal)
 
-                # MARK: - MCOM ISD Data
+                with col1:
+                    st.markdown(
+                        *styling(
+                            f"⛐ DRIVE TEST {siteid}",
+                            font_size=28,
+                            text_align="left",
+                            tag="h6",
+                        )
+                    )
+
+                col1, col2, col3 = st.columns([1, 1, 1])
+                con1 = col1.container(border=True)
+                con2 = col2.container(border=True)
+                con3 = col3.container(border=True)
+
+                with con1:
+                    with stylable_container(
+                        key="rsrpsinr",
+                        css_styles="""
+                        img {
+                            display: block;
+                            margin-left: auto;
+                            margin-right: auto;
+                            width: 100%;
+                            max-width: 100%;
+                            position: relative;
+                            top: 0px;
+                        }
+                        .custom-container {
+                            background-color: #F5F5F5;
+                            border: 2px solid rgba(49, 51, 63, 0.2);
+                            border-radius: 0.5rem;
+                            padding: calc(1em - 1px);
+                        }
+                        """,
+                    ):
+                        st.markdown(
+                            *styling(
+                                f"RSRP & SINR {siteid}",
+                                font_size=24,
+                                text_align="center",
+                                tag="h6",
+                            )
+                        )
+                        if os.path.exists(folder):
+                            idlersrp = os.path.join(folder, "idlersrp.png")
+                            sinr = os.path.join(folder, "sinr.png")
+                            if os.path.exists(idlersrp) and os.path.exists(sinr):
+                                st.markdown(*styling("RSRP IDLE", font_size=15))
+                                st.image(idlersrp, caption=None, use_column_width=True)
+                                st.markdown(*styling("SINR", font_size=15))
+                                st.image(sinr, caption=None, use_column_width=True)
+                            else:
+                                st.write(
+                                    f"Please upload the images: {idlersrp} & {sinr}"
+                                )
+                        else:
+                            st.write(f"Path does not exist: {folder}")
+
+                with con2:
+                    with stylable_container(
+                        key="pci",
+                        css_styles="""
+                        img {
+                            display: block;
+                            margin-left: auto;
+                            margin-right: auto;
+                            width: 100%;
+                            max-width: 100%;
+                            position: relative;
+                            top: 0px;
+                        }
+                        .custom-container {
+                            background-color: #F5F5F5;
+                            border: 2px solid rgba(49, 51, 63, 0.2);
+                            border-radius: 0.5rem;
+                            padding: calc(1em - 1px);
+                        }
+                        """,
+                    ):
+                        st.markdown(
+                            *styling(
+                                f"PCI {siteid}",
+                                font_size=24,
+                                text_align="center",
+                                tag="h6",
+                            )
+                        )
+                        if os.path.exists(folder):
+                            pci = os.path.join(folder, "pci.png")
+                            if os.path.exists(pci):
+                                st.markdown(*styling("PCI", font_size=15))
+                                st.image(pci, caption=None, use_column_width=True)
+                            else:
+                                st.write(f"Please upload the images: {pci}")
+                        else:
+                            st.write(f"Path does not exist: {folder}")
+
+                with con3:
+                    with stylable_container(
+                        key="pci",
+                        css_styles="""
+                        img {
+                            display: block;
+                            margin-left: auto;
+                            margin-right: auto;
+                            width: 100%;
+                            max-width: 100%;
+                            position: relative;
+                            top: 0px;
+                        }
+                        .custom-container {
+                            background-color: #F5F5F5;
+                            border: 2px solid rgba(49, 51, 63, 0.2);
+                            border-radius: 0.5rem;
+                            padding: calc(1em - 1px);
+                        }
+                        """,
+                    ):
+                        st.markdown(
+                            *styling(
+                                f"THROUGHPUT {siteid}",
+                                font_size=24,
+                                text_align="center",
+                                tag="h6",
+                            )
+                        )
+                        if os.path.exists(folder):
+                            dlthp = os.path.join(folder, "dlthp.png")
+                            ulthp = os.path.join(folder, "ulthp.png")
+                            if os.path.exists(dlthp) & os.path.exists(ulthp):
+                                st.markdown(
+                                    *styling("THROUGHPUT DOWNLOAD", font_size=15)
+                                )
+                                st.image(dlthp, caption=None, use_column_width=True)
+                                st.markdown(*styling("THROUGHPUT UPLOAD", font_size=15))
+                                st.image(ulthp, caption=None, use_column_width=True)
+                            else:
+                                st.write(f"Please upload the images: {dlthp} & {ulthp}")
+                        else:
+                            st.write(f"Path does not exist: {folder}")
+
+                # TODO : IMAGE STATIC
+                with col1:
+                    st.markdown(
+                        *styling(
+                            f"⛐ DRIVE TEST STATIC {siteid}",
+                            font_size=28,
+                            text_align="left",
+                            tag="h6",
+                        )
+                    )
+
+                col1, col2, col3 = st.columns([1, 1, 1])
+                con1 = col1.container(border=True)
+                con2 = col2.container(border=True)
+                con3 = col3.container(border=True)
+
+                with con1:
+                    with stylable_container(
+                        key="sec1",
+                        css_styles="""
+                        img {
+                            display: block;
+                            margin-left: auto;
+                            margin-right: auto;
+                            width: 100%;
+                            max-width: 100%;
+                            position: relative;
+                            top: 0px;
+                        }
+                        .custom-container {
+                            background-color: #F5F5F5;
+                            border: 2px solid rgba(49, 51, 63, 0.2);
+                            border-radius: 0.5rem;
+                            padding: calc(1em - 1px);
+                        }
+                        """,
+                    ):
+                        st.markdown(
+                            *styling(
+                                f"SECTOR 1 {siteid}",
+                                font_size=24,
+                                text_align="center",
+                                tag="h6",
+                            )
+                        )
+                        if os.path.exists(folder):
+                            gridsec1 = os.path.join(folder, "gridsec1.jpg")
+                            speedtestsec1 = os.path.join(folder, "speedtestsec1.jpg")
+                            servicemodesec1 = os.path.join(
+                                folder, "servicemodesec1.jpg"
+                            )
+                            gridservicemodesec1 = os.path.join(
+                                folder, "gridservicemodesec1.jpg"
+                            )
+
+                            existing_images = [
+                                img
+                                for img in [
+                                    gridsec1,
+                                    speedtestsec1,
+                                    gridservicemodesec1,
+                                    servicemodesec1,
+                                ]
+                                if os.path.exists(img)
+                            ]
+
+                            if existing_images:
+                                for img in existing_images:
+                                    st.image(img, caption=None, use_column_width=True)
+                            else:
+                                st.write("No images found for Sector 1.")
+                        else:
+                            st.write(f"Path does not exist: {folder}")
+
+                with con2:
+                    with stylable_container(
+                        key="sec2",
+                        css_styles="""
+                        img {
+                            display: block;
+                            margin-left: auto;
+                            margin-right: auto;
+                            width: 100%;
+                            max-width: 100%;
+                            position: relative;
+                            top: 0px;
+                        }
+                        .custom-container {
+                            background-color: #F5F5F5;
+                            border: 2px solid rgba(49, 51, 63, 0.2);
+                            border-radius: 0.5rem;
+                            padding: calc(1em - 1px);
+                        }
+                        """,
+                    ):
+                        st.markdown(
+                            *styling(
+                                f"SECTOR 2 {siteid}",
+                                font_size=24,
+                                text_align="center",
+                                tag="h6",
+                            )
+                        )
+                        if os.path.exists(folder):
+                            gridsec2 = os.path.join(folder, "gridsec2.jpg")
+                            speedtestsec2 = os.path.join(folder, "speedtestsec2.jpg")
+                            servicemodesec2 = os.path.join(
+                                folder, "servicemodesec2.jpg"
+                            )
+                            gridservicemodesec2 = os.path.join(
+                                folder, "gridservicemodesec2.jpg"
+                            )
+
+                            existing_images = [
+                                img
+                                for img in [
+                                    gridsec2,
+                                    speedtestsec2,
+                                    gridservicemodesec2,
+                                    servicemodesec2,
+                                ]
+                                if os.path.exists(img)
+                            ]
+
+                            if existing_images:
+                                for img in existing_images:
+                                    st.image(img, caption=None, use_column_width=True)
+                            else:
+                                st.write("No images found for Sector 2.")
+                        else:
+                            st.write(f"Path does not exist: {folder}")
+
+                with con3:
+                    with stylable_container(
+                        key="sec3",
+                        css_styles="""
+                        img {
+                            display: block;
+                            margin-left: auto;
+                            margin-right: auto;
+                            width: 100%;
+                            max-width: 100%;
+                            position: relative;
+                            top: 0px;
+                        }
+                        .custom-container {
+                            background-color: #F5F5F5;
+                            border: 2px solid rgba(49, 51, 63, 0.2);
+                            border-radius: 0.5rem;
+                            padding: calc(1em - 1px);
+                        }
+                        """,
+                    ):
+                        st.markdown(
+                            *styling(
+                                f"SECTOR 3 {siteid}",
+                                font_size=24,
+                                text_align="center",
+                                tag="h6",
+                            )
+                        )
+                        if os.path.exists(folder):
+                            gridsec3 = os.path.join(folder, "gridsec3.jpg")
+                            speedtestsec3 = os.path.join(folder, "speedtestsec3.jpg")
+                            servicemodesec3 = os.path.join(
+                                folder, "servicemodesec3.jpg"
+                            )
+                            gridservicemodesec3 = os.path.join(
+                                folder, "gridservicemodesec3.jpg"
+                            )
+
+                        if os.path.exists(folder):
+                            gridsec3 = os.path.join(folder, "gridsec3.jpg")
+                            speedtestsec3 = os.path.join(folder, "speedtestsec3.jpg")
+                            servicemodesec3 = os.path.join(
+                                folder, "servicemodesec3.jpg"
+                            )
+                            gridservicemodesec2 = os.path.join(
+                                folder, "gridservicemodesec3.jpg"
+                            )
+
+                            existing_images = [
+                                img
+                                for img in [
+                                    gridsec3,
+                                    speedtestsec3,
+                                    gridservicemodesec3,
+                                    servicemodesec3,
+                                ]
+                                if os.path.exists(img)
+                            ]
+
+                            if existing_images:
+                                for img in existing_images:
+                                    st.image(img, caption=None, use_column_width=True)
+                            else:
+                                st.write("No images found for Sector 3.")
+                        else:
+                            st.write(f"Path does not exist: {folder}")
+
                 session.close()
         else:
             if "mcom_data" in st.session_state and "ltemdtdata" in st.session_state:
