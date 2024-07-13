@@ -15,17 +15,21 @@ st.set_page_config(layout="wide")
 
 
 def load_config():
-    with open(".streamlit/secrets.toml") as f:
-        cfg = OmegaConf.create(toml.loads(f.read()))
-    return cfg
+    try:
+        with open(".streamlit/secrets.toml") as f:
+            return OmegaConf.create(toml.load(f))
+    except Exception as e:
+        st.error(f"Error loading configuration: {e}")
+        return None
 
 
 def create_session(cfg: DictConfig):
+    if cfg is None:
+        return None, None
     try:
         db_cfg = cfg.connections.postgresql
-        engine = create_engine(
-            f"{db_cfg.dialect}://{db_cfg.username}:{db_cfg.password}@{db_cfg.host}:{db_cfg.port}/{db_cfg.database}"
-        )
+        engine_url = f"{db_cfg.dialect}://{db_cfg.username}:{db_cfg.password}@{db_cfg.host}:{db_cfg.port}/{db_cfg.database}"
+        engine = create_engine(engine_url)
         Session = sessionmaker(bind=engine)
         return Session(), engine
     except Exception as e:
@@ -99,39 +103,39 @@ def colors():
 
 
 def create_chart(df, site, parameter):
-    fig = make_subplots(specs=[[{"secondary_y": False}]])
+    def format_x_axis(date_id, hour_id):
+        return date_id.astype(str) + " " + hour_id.astype(str).str.zfill(2) + ":00:00"
 
-    sectors = sorted(df["sector"].unique())
-    title = get_header(df["EUtranCellFDD"].unique())
-
-    color_mapping = {
-        cell: color for cell, color in zip(df["EUtranCellFDD"].unique(), colors())
-    }
-
-    for sector in sectors:
-        sector_df = df[df["sector"] == sector]
-        for cell in sector_df["EUtranCellFDD"].unique():
-            cell_df = sector_df[sector_df["EUtranCellFDD"] == cell]
-            cell_df = cell_df.sort_values(by=["DATE_ID", "hour_id"])
-            x_axis = (
-                cell_df["DATE_ID"].astype(str)
-                + " "
-                + cell_df["hour_id"].astype(str).str.zfill(2)
-                + ":00:00"
-            )
-            fig.add_trace(
-                go.Scatter(
-                    x=x_axis,
-                    y=cell_df[parameter],
-                    mode="lines",
-                    name=cell,
-                    line=dict(color=color_mapping[cell]),
+    def add_cell_trace(fig, x_axis, y_values, cell_name, color):
+        fig.add_trace(
+            go.Scatter(
+                x=x_axis,
+                y=y_values,
+                mode="lines",
+                name=cell_name,
+                line=dict(color=color),
+                hovertemplate=(
+                    f"<b>{cell_name}</b><br>"
+                    f"<b>Date:</b> %{{x}}<br>"
+                    f"<b>{parameter}:</b> %{{y}}<br>"
+                    "<extra></extra>"
                 ),
-                secondary_y=False,
-            )
+            ),
+            secondary_y=False,
+        )
+
+    fig = make_subplots(specs=[[{"secondary_y": False}]])
+    title = get_header(df["EUtranCellFDD"].unique())
+    color_mapping = dict(zip(df["EUtranCellFDD"].unique(), colors()))
+
+    for sector, sector_df in df.groupby("sector"):
+        for cell, cell_df in sector_df.groupby("EUtranCellFDD"):
+            cell_df = cell_df.sort_values(by=["DATE_ID", "hour_id"])
+            x_axis = format_x_axis(cell_df["DATE_ID"], cell_df["hour_id"])
+            add_cell_trace(fig, x_axis, cell_df[parameter], cell, color_mapping[cell])
 
     fig.update_layout(
-        title_text=f"{title}",
+        title_text=title,
         title_x=0.4,
         template="plotly_white",
         xaxis=dict(
@@ -159,15 +163,9 @@ def create_chart(df, site, parameter):
 
 # def get_header(cell, site):
 def get_header(cell):
-    result = []
-    for input_string in cell:
-        last_char = input_string[-1]
-        formatted_string = f"Sector {last_char}"
-        if formatted_string not in result:
-            result.append(formatted_string)
-    result.sort()
-    final_result = ", ".join(result)
-    return f"{final_result}"
+    sectors = {f"Sector {input_string[-1]}" for input_string in cell}
+    sorted_sectors = sorted(sectors)
+    return ", ".join(sorted_sectors)
 
 
 def main():

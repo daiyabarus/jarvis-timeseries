@@ -8,9 +8,9 @@ import streamlit as st
 import streamlit_antd_components as sac
 import toml
 from colors import ColorPalette
-from geoapp import GeoApp
 from omegaconf import DictConfig, OmegaConf
 from plotly.subplots import make_subplots
+from review.geoapp import GeoApp
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from streamlit_extras.mandatory_date_range import date_range_picker
@@ -1127,25 +1127,32 @@ class ChartGenerator:
             "perc_15000",
             "perc_30000",
         ]
-        df = df[["Cell_Name"] + plot_columns]
+
+        if "ci" in df.columns:
+            df = df[["ci", "Cell_Name"] + plot_columns]
+            color_by = "ci"
+        else:
+            df = df[["Cell_Name"] + plot_columns]
+            color_by = "Cell_Name"
 
         x_values = plot_columns
-        unique_values = df["Cell_Name"].unique()
+        unique_values = df[color_by].unique()
         colors = self.get_colors(len(unique_values))
-        color_mapping = {cell: color for cell, color in zip(unique_values, colors)}
+        color_mapping = {value: color for value, color in zip(unique_values, colors)}
 
         fig = go.Figure()
 
-        for cell in unique_values:
-            filtered_df = df[df["Cell_Name"] == cell]
+        for value in unique_values:
+            filtered_df = df[df[color_by] == value]
+            cell_name = filtered_df["Cell_Name"].iloc[
+                0
+            ]  # Get the corresponding Cell_Name
             fig.add_trace(
                 go.Bar(
                     x=x_values,
                     y=filtered_df.loc[:, x_values].values[0],
-                    name=cell,
-                    marker_color=color_mapping[cell],
-                    # text=[cell] * len(x_values),
-                    # textposition="auto",
+                    name=cell_name,
+                    marker_color=color_mapping[value],
                 )
             )
 
@@ -1171,6 +1178,7 @@ class ChartGenerator:
             ),
             margin=dict(l=20, r=20, t=40, b=20),
         )
+
         with stylable_container(
             key="container_with_border",
             css_styles="""
@@ -1186,6 +1194,7 @@ class ChartGenerator:
             with container:
                 st.plotly_chart(fig, use_container_width=True)
 
+    def create_charts_p_charts(self, )
 
 class App:
     def __init__(self):
@@ -1346,14 +1355,6 @@ class App:
                         print(f"An error occurred: {e}")
                         return None
 
-                # Example usage
-                isd_data_path = "path_to_isd_data.csv"
-                tastate_data_path = "path_to_tastate_data.csv"
-
-                result = calculate_rf(isd_data_path, tastate_data_path)
-                if result is not None:
-                    print(result)
-
                 # Define a function to display images or messages
                 def display_image_or_message(
                     column, folder_path, image_name, message_prefix
@@ -1383,13 +1384,13 @@ class App:
                     if os.path.exists(folder):
                         tier_data = load_tier_data(tier_path)
                     else:
-                        st.write(f"Folder does not exist: {folder}")
+                        st.error(f"Folder does not exist: {folder}")
                         tier_data = None
 
                     if os.path.exists(folder):
                         isd_data = load_isd_data(isd_path)
                     else:
-                        st.write(f"Folder does not exist: {folder}")
+                        st.error(f"Folder does not exist: {folder}")
                         isd_data = None
 
                     # st.write(f"ISD data: {isd_data}")
@@ -1468,7 +1469,7 @@ class App:
                             con2, folder, "alarm.jpg", "Please upload the image"
                         )
                     else:
-                        st.write(f"Path does not exist: {folder}")
+                        st.error(f"Path does not exist: {folder}")
 
                     mcom_data = self.query_manager.get_mcom_data(siteid)
                     self.dataframe_manager.add_dataframe(
@@ -2061,9 +2062,9 @@ class App:
                             if os.path.exists(ret):
                                 st.image(ret, caption=None, use_column_width=True)
                             else:
-                                st.write(f"Please upload the image: {ret}")
+                                st.error(f"Please upload the image: {ret}")
                         else:
-                            st.write(f"Path does not exist: {folder}")
+                            st.error(f"Path does not exist: {folder}")
 
                 # MARK: - GeoApp MDT Data
                 mcom_data1 = self.query_manager.get_mcom_data(siteid)
@@ -2091,6 +2092,8 @@ class App:
                     )
 
                 self.dataframe_manager.add_dataframe(f"mcom_data_{siteid}", mcom_data)
+                # TODO: mcom_data
+                # st.write(mcom_data)
 
                 if isinstance(selected_neids, list):
                     selected_neids = selected_neids[0]
@@ -2101,9 +2104,6 @@ class App:
                     raise ValueError(
                         "selected_neid should be a string or a list containing a string"
                     )
-
-                # st.write("LTE MCOM DATA")
-                # st.write(ltemcomdata)
 
                 # MARK: - GeoApp MDT Data
                 ltemdtdata = self.query_manager.get_ltemdt_data(selected_sites)
@@ -2118,33 +2118,23 @@ class App:
                 ltemdtdata_final = ltemdtdata[
                     ltemdtdata[["enodebid", "ci"]].apply(tuple, axis=1).isin(filter_set)
                 ]
-                # st.write("LTE MDT DATA FINAL")
-                # st.write(ltemdtdata_final)
 
                 # TODO: mcom and ta state
-                mcom_ta = self.query_manager.get_mcom_tastate(selected_neids)
-                self.dataframe_manager.add_dataframe("mcom_ta", mcom_ta)
-                # st.write("MCOM TA")
-                # st.write(mcom_ta)
-                # st.write(mcom_ta)
-
+                # mcom_ta = self.query_manager.get_mcom_tastate(selected_neids)
+                # self.dataframe_manager.add_dataframe("mcom_ta", mcom_data1)
                 ltetastate_data = self.query_manager.get_ltetastate_data(selected_sites)
                 self.dataframe_manager.add_dataframe("ltetastate_data", ltetastate_data)
-                ltemcomdata["cellId"] = ltemcomdata["cellId"].astype(float)
-                ltemcomdata["eNBId"] = ltemcomdata["eNBId"].astype(float)
+                mcom_data["cellId"] = mcom_data["cellId"].astype(float)
+                mcom_data["eNBId"] = mcom_data["eNBId"].astype(float)
                 ltetastate_data["ci"] = ltetastate_data["ci"].astype(float)
                 ltetastate_data["enodebid"] = ltetastate_data["enodebid"].astype(float)
 
-                mcom_ta_renamed = ltemcomdata.rename(
+                mcom_ta_renamed = mcom_data.rename(
                     columns={"cellId": "ci", "eNBId": "enodebid"}
                 )
 
                 mcom_ta_indexed = mcom_ta_renamed.set_index(["ci", "enodebid"])
-                # st.write("mcom_ta_indexed")
-                # st.write(mcom_ta_indexed)
                 ltetastate_data_indexed = ltetastate_data.set_index(["ci", "enodebid"])
-                # st.write("ltetastate_data_indexed")
-                # st.write(ltetastate_data_indexed)
                 tastate_data = pd.merge(
                     mcom_ta_indexed,
                     ltetastate_data_indexed,
@@ -2153,15 +2143,18 @@ class App:
                 )
 
                 # MARK: use this to calculate RF Propagation
-                # st.write("TA STATE DATA")
-                # st.write(tastate_data)
-                # st.write(isd_data)
-
-                # st.write(tafinal)
                 self.dataframe_manager.add_dataframe("tastate_data", tastate_data)
                 col1, col2 = st.columns([3, 2])
                 con1 = col1.container()
                 con2 = col2.container()
+                # MARK: - GeoApp MDT Data
+                st.session_state.mcom_data = mcom_data
+                st.session_state.combined_target_data = combined_target_data
+
+                # MARK: - GeoApp MDT Data
+                ltemdtdata = self.query_manager.get_ltemdt_data(selected_sites)
+                self.dataframe_manager.add_dataframe("ltemdtdata", ltemdtdata)
+                st.session_state.ltemdtdata = ltemdtdata
                 st.session_state.ltemdtdata_final = ltemdtdata_final
                 st.session_state.ltemcomdata = ltemdtdata_final
                 with con1:
@@ -2173,7 +2166,7 @@ class App:
                             tag="h6",
                         )
                     )
-                    self.geodata = GeoApp(ltemcomdata, ltemdtdata_final)
+                    self.geodata = GeoApp(mcom_data, ltemdtdata)
                     self.geodata.run_geo_app()
                 with con2:
                     st.markdown(*styling(" "))
@@ -2200,7 +2193,7 @@ class App:
                 with col1:
                     st.markdown(
                         *styling(
-                            f"⛐ DRIVE TEST {siteid}",
+                            f"⛐ Drive Test Verification for Site {siteid}",
                             font_size=28,
                             text_align="left",
                             tag="h6",
@@ -2250,11 +2243,11 @@ class App:
                                 st.markdown(*styling("SINR", font_size=15))
                                 st.image(sinr, caption=None, use_column_width=True)
                             else:
-                                st.write(
+                                st.error(
                                     f"Please upload the images: {idlersrp} & {sinr}"
                                 )
                         else:
-                            st.write(f"Path does not exist: {folder}")
+                            st.error(f"Path does not exist: {folder}")
 
                 with con2:
                     with stylable_container(
@@ -2291,9 +2284,9 @@ class App:
                                 st.markdown(*styling("PCI", font_size=15))
                                 st.image(pci, caption=None, use_column_width=True)
                             else:
-                                st.write(f"Please upload the images: {pci}")
+                                st.error(f"Please upload the images: {pci}")
                         else:
-                            st.write(f"Path does not exist: {folder}")
+                            st.error(f"Path does not exist: {folder}")
 
                 with con3:
                     with stylable_container(
@@ -2335,15 +2328,15 @@ class App:
                                 st.markdown(*styling("THROUGHPUT UPLOAD", font_size=15))
                                 st.image(ulthp, caption=None, use_column_width=True)
                             else:
-                                st.write(f"Please upload the images: {dlthp} & {ulthp}")
+                                st.error(f"Please upload the images: {dlthp} & {ulthp}")
                         else:
-                            st.write(f"Path does not exist: {folder}")
+                            st.error(f"Path does not exist: {folder}")
 
                 # TODO : IMAGE STATIC
                 with col1:
                     st.markdown(
                         *styling(
-                            f"⛐ DRIVE TEST STATIC {siteid}",
+                            f"⛐ CET Static Verification for Site {siteid}",
                             font_size=28,
                             text_align="left",
                             tag="h6",
@@ -2409,9 +2402,9 @@ class App:
                                 for img in existing_images:
                                     st.image(img, caption=None, use_column_width=True)
                             else:
-                                st.write("No images found for Sector 1.")
+                                st.error("No Functionality Test for Sector 1.")
                         else:
-                            st.write(f"Path does not exist: {folder}")
+                            st.error(f"Path does not exist: {folder}")
 
                 with con2:
                     with stylable_container(
@@ -2467,9 +2460,9 @@ class App:
                                 for img in existing_images:
                                     st.image(img, caption=None, use_column_width=True)
                             else:
-                                st.write("No images found for Sector 2.")
+                                st.error("No Functionality Test for Sector 2.")
                         else:
-                            st.write(f"Path does not exist: {folder}")
+                            st.error(f"Path does not exist: {folder}")
 
                 with con3:
                     with stylable_container(
@@ -2535,9 +2528,9 @@ class App:
                                 for img in existing_images:
                                     st.image(img, caption=None, use_column_width=True)
                             else:
-                                st.write("No images found for Sector 3.")
+                                st.error("No Functionality Test for Sector 3.")
                         else:
-                            st.write(f"Path does not exist: {folder}")
+                            st.error(f"Path does not exist: {folder}")
 
                 session.close()
         else:

@@ -46,7 +46,7 @@ class GeoApp:
         )
         if st.session_state.tile_provider != tile_provider:
             st.session_state.tile_provider = tile_provider
-            st.experimental_rerun()
+            st.rerun()
         self.map = folium.Map(
             location=self.map_center,
             zoom_start=15,
@@ -68,7 +68,13 @@ class GeoApp:
 
     def get_rsrp_color(self, rsrp):
         """Determines the color representation based on the RSRP value."""
-        ranges = [(-85, "blue"), (-95, "green"), (-105, "yellow"), (-115, "orange")]
+        ranges = [
+            (-80, "blue"),
+            (-95, "#14380A"),
+            (-100, "#93FC7C"),
+            (-110, "yellow"),
+            (-115, "red"),
+        ]
         for limit, color in ranges:
             if rsrp >= limit:
                 return color
@@ -119,7 +125,7 @@ class GeoApp:
 
     def create_popup_content(self, row):
         return f"""
-        <div style="font-family: Arial; font-size: 12px;">
+        <div style="font-family: Arial; font-size: 16px;">
             <b>Site:</b> {row['Site_ID']}<br>
             <b>Cell:</b> {row['Cell_Name']}<br>
             <b>CI:</b> {row['cellId']}
@@ -221,22 +227,22 @@ class GeoApp:
         combined_legend_template = """
         {% macro html(this, kwargs) %}
         <div id='maplegend' class='maplegend'
-            style='position: absolute; z-index:9999; background-color: rgba(255, 255, 255, 0.5);
-            border-radius: 6px; padding: 10px; font-size: 12px; right: 12px; top: 70px;'>
+            style='position: absolute; z-index:9999; background-color: rgba(192, 192, 192, 1);
+            border-radius: 6px; padding: 10px; font-size: 18px; right: 12px; top: 70px;'>
         <div class='legend-scale'>
           <ul class='legend-labels'>
             <li><strong>RSRP</strong></li>
-            <li><span style='background: blue; opacity: 0.75;'></span>RSRP >= -85</li>
-            <li><span style='background: green; opacity: 0.75;'></span>-95 <= RSRP < -85</li>
-            <li><span style='background: yellow; opacity: 0.75;'></span>-105 <= RSRP < -95</li>
-            <li><span style='background: orange; opacity: 0.75;'></span>-115 <= RSRP < -105</li>
-            <li><span style='background: red; opacity: 0.75;'></span>RSRP < -115</li>
+            <li><span style='background: blue; opacity: 1;'></span>RSRP >= -85</li>
+            <li><span style='background: green; opacity: 1;'></span>-95 <= RSRP < -85</li>
+            <li><span style='background: yellow; opacity: 1;'></span>-105 <= RSRP < -95</li>
+            <li><span style='background: orange; opacity: 1;'></span>-115 <= RSRP < -105</li>
+            <li><span style='background: red; opacity: 1;'></span>RSRP < -115</li>
           </ul>
           <ul class='legend-labels'>
             <li><strong>CELL IDENTITY</strong></li>
         """
         for ci, color in self.ci_colors.items():
-            combined_legend_template += f"<li><span style='background: {color}; opacity: 0.75;'></span>CI {ci}</li>"
+            combined_legend_template += f"<li><span style='background: {color}; opacity: 1;'></span>CI {ci}</li>"
 
         combined_legend_template += """
           </ul>
@@ -275,11 +281,8 @@ class GeoApp:
             )
             if st.session_state.category != category:
                 st.session_state.category = category
-                st.experimental_rerun()
+                st.rerun()
 
-            # col1, _, _ = st.columns(3)
-
-            # with col1:
         self.add_geocell_layer()
         color_by_ci = "CellId" in category
         self.add_driveless_layer(color_by_ci=color_by_ci)

@@ -1,24 +1,19 @@
-# geo.py
+# geo_app.py
 import folium
-import pandas as pd
 import streamlit as st
 from branca.element import MacroElement, Template
 from colors import ColorPalette
 
 
 class GeoApp:
-    def __init__(self, geocell_file, driveless_file):
-        self.geocell_data = self.load_data(geocell_file)
-        self.driveless_data = self.load_data(driveless_file)
+    def __init__(self, geocell_data, driveless_data):
+        self.geocell_data = geocell_data
+        self.driveless_data = driveless_data
         self.unique_cis = self.get_unique_cis()
         self.map_center = self.calculate_map_center()
         self.tile_options = self.define_tile_options()
         self.map = None
-
-    @staticmethod
-    def load_data(file_path):
-        """Load data from a CSV file."""
-        return pd.read_csv(file_path)
+        self.ci_colors = self.assign_ci_colors()
 
     def get_unique_cis(self):
         """Extract and sort unique Cell IDs."""
@@ -41,9 +36,17 @@ class GeoApp:
 
     def initialize_map(self):
         """Initialize the map with a selected tile provider."""
+        if "tile_provider" not in st.session_state:
+            st.session_state.tile_provider = list(self.tile_options.keys())[1]
         tile_provider = st.selectbox(
-            "Select Map", list(self.tile_options.keys()), index=1
+            "Map",
+            list(self.tile_options.keys()),
+            index=list(self.tile_options.keys()).index(st.session_state.tile_provider),
+            key="tile_provider_select",
         )
+        if st.session_state.tile_provider != tile_provider:
+            st.session_state.tile_provider = tile_provider
+            st.rerun()
         self.map = folium.Map(
             location=self.map_center,
             zoom_start=15,
@@ -51,19 +54,27 @@ class GeoApp:
             attr=tile_provider,
         )
 
+    def assign_ci_colors(self):
+        """Assign colors to unique Cell IDs."""
+        ci_colors = {}
+        for index, ci in enumerate(self.unique_cis):
+            color = ColorPalette.get_color(index)
+            ci_colors[ci] = color
+        return ci_colors
+
     def get_ci_color(self, ci):
-        """Get color based on Cell ID index."""
-        ci_index = self.unique_cis.index(ci)
-        return ColorPalette.get_color(ci_index)
+        """Get color based on Cell ID."""
+        return self.ci_colors.get(ci, "black")
 
     def get_rsrp_color(self, rsrp):
-        """
-        Determines the color representation based on the RSRP value.
-
-        :param rsrp: The RSRP value to evaluate.
-        :return: A string representing the color associated with the RSRP range.
-        """
-        ranges = [(-85, "blue"), (-95, "green"), (-105, "yellow"), (-115, "orange")]
+        """Determines the color representation based on the RSRP value."""
+        ranges = [
+            (-80, "blue"),
+            (-95, "#14380A"),
+            (-100, "#93FC7C"),
+            (-110, "yellow"),
+            (-115, "red"),
+        ]
         for limit, color in ranges:
             if rsrp >= limit:
                 return color
@@ -93,28 +104,49 @@ class GeoApp:
             )
             points.append([degrees(lat_new), degrees(lon_new)])
 
-        points.append([lat, lon])  # Return to the starting point for a complete polygon
+        points.append([lat, lon])
         return points
 
     def add_geocell_layer(self):
         geocell_layer = folium.FeatureGroup(name="Geocell Sites")
 
+        polygons = []
         for _, row in self.geocell_data.iterrows():
             color = self.get_ci_color(row["cellId"])
             self.add_circle_marker(row, color, geocell_layer)
             self.add_custom_marker(row, geocell_layer)
+            polygons.append((row, color))
+
+        # Add polygons after markers to prevent them from being sealed by circles
+        for row, color in polygons:
             self.add_sector_polygon(row, color, geocell_layer)
 
         geocell_layer.add_to(self.map)
 
     def create_popup_content(self, row):
         return f"""
-        <div style="font-family: Arial; font-size: 12px;">
+        <div style="font-family: Arial; font-size: 16px;">
             <b>Site:</b> {row['Site_ID']}<br>
             <b>Cell:</b> {row['Cell_Name']}<br>
             <b>CI:</b> {row['cellId']}
         </div>
         """
+
+    def add_sector_polygon(self, row, color, layer):
+        sector_polygon = self.create_sector_polygon(
+            row["Latitude"],
+            row["Longitude"],
+            row["Dir"],
+            row["Ant_BW"],
+            row["Ant_Size"],
+        )
+        folium.Polygon(
+            locations=sector_polygon,
+            color="black",
+            fill=True,
+            fill_color=color,
+            fill_opacity=1.0,
+        ).add_to(layer)
 
     def add_circle_marker(self, row, color, layer):
         popup_content = self.create_popup_content(row)
@@ -135,22 +167,6 @@ class GeoApp:
             icon=folium.DivIcon(
                 html=f'<div style="font-size: 24pt; color: red">{row["Site_ID"]}</div>'
             ),
-        ).add_to(layer)
-
-    def add_sector_polygon(self, row, color, layer):
-        sector_polygon = self.create_sector_polygon(
-            row["Latitude"],
-            row["Longitude"],
-            row["Dir"],
-            row["Ant_BW"],
-            row["Ant_Size"],
-        )
-        folium.Polygon(
-            locations=sector_polygon,
-            color="black",
-            fill=True,
-            fill_color=color,
-            fill_opacity=1.0,
         ).add_to(layer)
 
     def add_driveless_layer(self, color_by_ci=True):
@@ -200,8 +216,7 @@ class GeoApp:
 
     def display_legend(self):
         st.subheader("Legend")
-        for index, ci in enumerate(self.unique_cis):
-            color = ColorPalette.get_color(index)
+        for ci, color in self.ci_colors.items():
             st.markdown(
                 f'<span style="color:{color};">{ci}: {color}</span>',
                 unsafe_allow_html=True,
@@ -212,23 +227,22 @@ class GeoApp:
         combined_legend_template = """
         {% macro html(this, kwargs) %}
         <div id='maplegend' class='maplegend'
-            style='position: absolute; z-index:9999; background-color: rgba(255, 255, 255, 0.5);
-            border-radius: 6px; padding: 10px; font-size: 12px; right: 12px; top: 70px;'>
+            style='position: absolute; z-index:9999; background-color: rgba(192, 192, 192, 1);
+            border-radius: 6px; padding: 10px; font-size: 18px; right: 12px; top: 70px;'>
         <div class='legend-scale'>
           <ul class='legend-labels'>
             <li><strong>RSRP</strong></li>
-            <li><span style='background: blue; opacity: 0.75;'></span>RSRP >= -85</li>
-            <li><span style='background: green; opacity: 0.75;'></span>-95 <= RSRP < -85</li>
-            <li><span style='background: yellow; opacity: 0.75;'></span>-105 <= RSRP < -95</li>
-            <li><span style='background: orange; opacity: 0.75;'></span>-115 <= RSRP < -105</li>
-            <li><span style='background: red; opacity: 0.75;'></span>RSRP < -115</li>
+            <li><span style='background: blue; opacity: 1;'></span> -80 to 0</li>
+            <li><span style='background: #14380A;; opacity: 1;'></span>-95 to -80</li>
+            <li><span style='background: #93FC7C; opacity: 1;'></span>-100 to -95</li>
+            <li><span style='background: yellow; opacity: 1;'></span>-110 to -100</li>
+            <li><span style='background: red; opacity: 1;'></span>-150 to -110</li>
           </ul>
           <ul class='legend-labels'>
             <li><strong>CELL IDENTITY</strong></li>
         """
-        for index, ci in enumerate(self.unique_cis):
-            color = ColorPalette.get_color(index)
-            combined_legend_template += f"<li><span style='background: {color}; opacity: 0.75;'></span>CI {ci}</li>"
+        for ci, color in self.ci_colors.items():
+            combined_legend_template += f"<li><span style='background: {color}; opacity: 1;'></span>CI {ci}</li>"
 
         combined_legend_template += """
           </ul>
@@ -252,38 +266,28 @@ class GeoApp:
             self.initialize_map()
 
         with col2:
+            if "category" not in st.session_state:
+                st.session_state.category = "CellId"
             category = st.selectbox(
                 "Category",
                 ["CellId", "RSRP", "CellId with Spidergraph", "RSRP with Spidergraph"],
+                index=[
+                    "CellId",
+                    "RSRP",
+                    "CellId with Spidergraph",
+                    "RSRP with Spidergraph",
+                ].index(st.session_state.category),
+                key="category_select",
             )
+            if st.session_state.category != category:
+                st.session_state.category = category
+                st.rerun()
 
-        col1, col2, col3 = st.columns([3, 1, 1])
+        self.add_geocell_layer()
+        color_by_ci = "CellId" in category
+        self.add_driveless_layer(color_by_ci=color_by_ci)
 
-        with col1:
-            self.add_geocell_layer()
-            color_by_ci = "CellId" in category
-            self.add_driveless_layer(color_by_ci=color_by_ci)
+        if "Spidergraph" in category:
+            self.add_spider_graph()
 
-            if "Spidergraph" in category:
-                self.add_spider_graph()
-
-            self.display_map()
-
-        with col2:
-            st.markdown("---")
-
-        with col3:
-            st.markdown("---")
-
-
-# if __name__ == "__main__":
-#     st.set_page_config(layout="wide")
-#     script_dir = os.path.dirname(__file__)
-#     sitelist_mcom = os.path.join(script_dir, "test_geocell.csv")
-#     sitelist_driveless = os.path.join(script_dir, "test_driveless.csv")
-
-#     app = GeoApp(sitelist_mcom, sitelist_driveless)
-#     app.run()
-# sample call to the class from another file
-# app = GeoApp(sitelist_mcom, sitelist_driveless)
-# app.run_geo_app()
+        self.display_map()
