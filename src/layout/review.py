@@ -17,8 +17,6 @@ from streamlit_extras.mandatory_date_range import date_range_picker
 from streamlit_extras.stylable_container import stylable_container
 from styles import styling
 
-# MARK: - Config OK
-
 
 class Config:
     def load(self):
@@ -963,6 +961,13 @@ class ChartGenerator:
                     y=filtered_df[y_param],
                     name=value,
                     marker_color=color_mapping[value],
+                    hovertemplate=(
+                        f"<b>®️ {value}</b><br>"
+                        f"<b>{y_param} 🟰 </b> %{{y}}<br>"
+                        f"<b>{x1_param} 🟰 </b> %{{x}}<br>"
+                        "<extra></extra>"
+                    ),
+                    hoverlabel=dict(font_size=14, font_family="Vodafone"),
                 )
             )
 
@@ -1186,6 +1191,12 @@ class ChartGenerator:
                     y=filtered_df.loc[:, x_values].values[0],
                     name=cell_name,
                     marker_color=color_mapping[value],
+                    hovertemplate=(
+                        f"<b>®️ {cell_name}</b><br>"
+                        f"<b></b> %{{x}} - %{{y}}<br>"
+                        "<extra></extra>"
+                    ),
+                    hoverlabel=dict(font_size=14, font_family="Vodafone"),
                 )
             )
 
