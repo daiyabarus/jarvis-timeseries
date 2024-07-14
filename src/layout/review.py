@@ -258,7 +258,6 @@ class QueryManager:
         params = {f"site_{i}": f"%{site}%" for i, site in enumerate(selected_sites)}
         return _self.fetch_data(query, params=params)
 
-    # TODO: - Create query for ta-state
     @st.cache_data(ttl=600)
     def get_ltetastate_data(_self, siteid):
         like_conditions = " OR ".join(
@@ -401,7 +400,6 @@ class ChartGenerator:
         last_char = cell[-1].upper()
         return sector_mapping.get(last_char, 0)
 
-    # TAG: - create_charts
     def create_charts(
         self,
         df,
@@ -508,7 +506,6 @@ class ChartGenerator:
             with container:
                 st.altair_chart(combined_chart, use_container_width=True)
 
-    # TAG: - create_charts_datums
     def create_charts_datums(
         self,
         df,
@@ -629,7 +626,6 @@ class ChartGenerator:
             with container:
                 st.altair_chart(combined_chart, use_container_width=True)
 
-    # TAG: - create_charts_area
     def create_charts_area(
         self,
         df,
@@ -732,7 +728,6 @@ class ChartGenerator:
             with container:
                 st.altair_chart(combined_chart, use_container_width=True)
 
-    # TAG: - create_charts_neid
     def create_charts_neid(
         self, df, param, site, x_param, y_param, neid, yaxis_range=None, xrule=None
     ):
@@ -823,12 +818,12 @@ class ChartGenerator:
         with container:
             st.altair_chart(chart, use_container_width=True)
 
-    # TAG: - Create Charts hourly
+    # TODO: - transform to plotly
     def create_charts_hourly(
         self, df, param, site, x_param, y_param, sector_param, yaxis_range=None
     ):
+        df = df.sort_values(by=x_param)
         sectors = sorted(df[sector_param].apply(self.determine_sector).unique())
-        # title = self.get_header(df[sector_param].unique(), param, site)
 
         color_mapping = {
             cell: color
@@ -844,59 +839,94 @@ class ChartGenerator:
 
             # Determine y-axis range
             if yaxis_range:
-                y_scale = alt.Scale(domain=yaxis_range)
+                yaxis_range_config = dict(range=yaxis_range)
             else:
-                y_scale = alt.Scale()
+                yaxis_range_config = {}
 
-            sector_chart = (
-                alt.Chart(sector_df)
-                .mark_line(strokeWidth=10)
-                .encode(
-                    x=alt.X(x_param, type="temporal", axis=alt.Axis(title=None)),
-                    y=alt.Y(
-                        y_param,
-                        type="quantitative",
-                        scale=y_scale,
-                        axis=alt.Axis(title=y_param),
-                    ),
-                    color=alt.Color(
-                        sector_param,
-                        scale=alt.Scale(
-                            domain=list(color_mapping.keys()),
-                            range=list(color_mapping.values()),
+            fig = go.Figure()
+
+            for cell in sector_df[sector_param].unique():
+                cell_df = sector_df[sector_df[sector_param] == cell]
+                fig.add_trace(
+                    go.Scatter(
+                        x=cell_df[x_param],
+                        y=cell_df[y_param],
+                        mode="lines",
+                        name=cell,
+                        line=dict(color=color_mapping[cell], width=2),
+                        hovertemplate=(
+                            f"<b>®️ {cell}</b><br>"
+                            f"<b>Date 🟰 </b> %{{x}}<br>"
+                            f"<b>{y_param} 🟰 </b> %{{y}}<br>"
+                            "<extra></extra>"
                         ),
-                    ),
+                        hoverlabel=dict(font_size=14, font_family="Vodafone"),
+                    )
                 )
-                .properties(title=f"Sector {sector}", width=600, height=150)
-            )
-            charts.append(sector_chart)
 
-        combined_chart = (
-            alt.hconcat(*charts, autosize="fit", background="#F5F5F5")
-            .configure_title(
-                fontSize=18,
-                anchor="middle",
-                font="Vodafone",
-                color="#717577",
+            fig.update_layout(
+                xaxis_title=None,
+                yaxis_title=y_param,
+                width=600,
+                height=350,  # Updated height for each individual chart
+                yaxis=yaxis_range_config,
+                title=dict(
+                    text=f"Sector {sector}",
+                    font=dict(size=18, family="Ericcson Hilda", color="#717577"),
+                    xanchor="center",
+                    x=0.5,
+                ),
+                font=dict(size=20),
+                legend=dict(
+                    orientation="h",
+                    title=dict(
+                        font=dict(size=16, family="Ericcson Hilda", color="#5F6264")
+                    ),
+                    font=dict(size=20, family="Ericcson Hilda"),
+                    yanchor="bottom",
+                    xanchor="left",
+                    x=0.01,
+                    y=-0.5,
+                    bgcolor="rgba(255,255,255,0)",
+                    bordercolor="rgba(0,0,0,0)",
+                    borderwidth=0,
+                    itemclick="toggleothers",
+                    itemdoubleclick="toggle",
+                    itemsizing="constant",
+                ),
+                paper_bgcolor="#F5F5F5",
+                plot_bgcolor="#F5F5F5",
             )
-            .configure_legend(
-                orient="bottom",
-                titleFontSize=16,
-                labelFontSize=14,
-                labelFont="Vodafone",
-                titleColor="#5F6264",
-                padding=10,
-                titlePadding=10,
-                cornerRadius=10,
-                # strokeColor="#9A9A9A",
-                columns=6,
-                titleAnchor="start",
-                direction="vertical",
-                gradientLength=400,
-                labelLimit=0,
-                symbolSize=30,
-                symbolType="square",
-            )
+
+            charts.append(fig)
+
+        # Split charts by sectors in a horizontal row
+        subplot_titles = [f"Sector {sector}" for sector in sectors]
+        combined_chart = make_subplots(
+            rows=1, cols=len(charts), shared_yaxes=True, subplot_titles=subplot_titles
+        )
+
+        for i, chart in enumerate(charts, start=1):
+            for trace in chart.data:
+                combined_chart.add_trace(trace, row=1, col=i)
+
+        combined_chart.update_layout(
+            autosize=True,
+            height=400,  # Set a total height for the combined chart
+            legend=dict(
+                orientation="h",
+                title=dict(font=dict(size=18, family="Vodafone", color="#5F6264")),
+                font=dict(size=16, family="Vodafone"),
+                yanchor="bottom",
+                xanchor="left",
+                x=0.01,
+                y=-0.7,
+                bgcolor="rgba(255,255,255,0)",
+                bordercolor="rgba(0,0,0,0)",
+                borderwidth=0,
+            ),
+            paper_bgcolor="#F5F5F5",
+            plot_bgcolor="#F5F5F5",
         )
 
         with stylable_container(
@@ -912,8 +942,9 @@ class ChartGenerator:
         ):
             container = st.container()
             with container:
-                st.altair_chart(combined_chart, use_container_width=True)
+                st.plotly_chart(combined_chart, use_container_width=True)
 
+    # MARK: - End of line transform chart
     def create_charts_vswr(self, df, x1_param, x2_param, y_param, nename):
         # Calculate the average y_param for each combination of x1_param and x2_param
         avg_df = df.groupby([x1_param, x2_param])[y_param].mean().reset_index()
@@ -972,7 +1003,6 @@ class ChartGenerator:
         with container:
             st.plotly_chart(fig, use_container_width=True)
 
-    # TAG: - Create chart for CQI Cluster
     def cqiclusterchart(self, df, tier_data, xrule=None):
         # Rename df columns for consistency
         df = df.rename(
@@ -1019,12 +1049,13 @@ class ChartGenerator:
                     y=baseline_chart1["cqi"],
                     mode="lines+text",
                     line=dict(color=color, dash="dashdot", width=5),
-                    name=f"{cellname} - Source",
-                    hovertemplate="%{y:.2f}<extra></extra>",
+                    name=f"{cellname}",
+                    hovertemplate=(
+                        f"<b>{cellname}</b><br>"
+                        f"<b>CQI :</b> %{{y}}<br>"
+                        "<extra></extra>"
+                    ),
                     hoverlabel=dict(bgcolor="white", font=dict(color="black")),
-                    text=[""] * (len(baseline_chart1) - 5) + [f"{cellname}"],
-                    textposition="top center",
-                    textfont=dict(size=10, color=color),
                 ),
                 row=1,
                 col=i + 1,
@@ -1054,10 +1085,13 @@ class ChartGenerator:
                         y=tier_value["cqi"],
                         mode="lines+text",
                         line=dict(color=color),
-                        name=f"{adjcellname} - 1st tier",
-                        hovertemplate="%{y:.2f}<extra></extra>",
+                        name=f"{cellname} - {adjcellname}",
+                        hovertemplate=(
+                            f"<b>{adjcellname} 🔀 {cellname}</b><br>"
+                            f"<b>CQI :</b> %{{y}}<br>"
+                            "<extra></extra>"
+                        ),
                         hoverlabel=dict(bgcolor="white", font=dict(color="black")),
-                        text=[""] * (len(tier_value) - 5) + [f"{adjcellname}"],
                         textposition="top center",
                         textfont=dict(size=10, color=color),
                     ),
@@ -1091,7 +1125,7 @@ class ChartGenerator:
                 bordercolor="#F5F5F5",
                 itemclick="toggleothers",
                 itemdoubleclick="toggle",
-                font=dict(size=20),
+                font=dict(size=16),
             ),
         )
 
@@ -1111,7 +1145,6 @@ class ChartGenerator:
             with container:
                 st.plotly_chart(fig, use_container_width=True)
 
-    # TODO: - create_charts_tastate
     def create_charts_tastate(self, df):
         # Select the specific headers for plotting
         plot_columns = [
@@ -1194,7 +1227,6 @@ class ChartGenerator:
             with container:
                 st.plotly_chart(fig, use_container_width=True)
 
-    def create_charts_p_charts(self, )
 
 class App:
     def __init__(self):
@@ -1207,14 +1239,12 @@ class App:
         self.geodata = None
 
     def run(self):
-        # Create database session
         session, engine = self.database_session.create_session()
         if session is None:
             return
 
         self.query_manager = QueryManager(engine)
 
-        # Load sitelist
         script_dir = os.path.dirname(__file__)
 
         sitelist_path = os.path.join(script_dir, "test_sitelist.csv")
@@ -1223,7 +1253,6 @@ class App:
         project_root = os.path.dirname(os.path.dirname(current_dir))
         assets_image = os.path.join(project_root, "assets/")
 
-        # Site selection
         (
             col1,
             col2,
@@ -1952,7 +1981,9 @@ class App:
                         tag="h6",
                     )
                 )
-                self.chart_generator.create_charts(
+                # TODO: - PRB Charts
+                # st.table(ltehourly_data)
+                self.chart_generator.create_charts_hourly(
                     df=ltehourly_data,
                     param="PRB Utilization",
                     site="Combined Sites",
@@ -1970,7 +2001,7 @@ class App:
                         tag="h6",
                     )
                 )
-                self.chart_generator.create_charts(
+                self.chart_generator.create_charts_hourly(
                     df=ltehourly_data,
                     param="Active User",
                     site="Combined Sites",
