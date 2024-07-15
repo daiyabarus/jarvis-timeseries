@@ -823,13 +823,15 @@ class ChartGenerator:
         df = df.sort_values(by=x_param)
         sectors = sorted(df[sector_param].apply(self.determine_sector).unique())
 
-        color_mapping = {
-            cell: color
-            for cell, color in zip(
-                df[sector_param].unique(),
-                self.get_colors(len(df[sector_param].unique())),
-            )
-        }
+        if not hasattr(self, "sector_colors"):
+            self.sector_colors = {}
+
+        new_sectors = [sector for sector in sectors if sector not in self.sector_colors]
+        new_colors = self.get_colors(len(new_sectors))
+
+        self.sector_colors.update(
+            {sector: color for sector, color in zip(new_sectors, new_colors)}
+        )
 
         charts = []
         for sector in sectors:
@@ -851,7 +853,7 @@ class ChartGenerator:
                         y=cell_df[y_param],
                         mode="lines",
                         name=cell,
-                        line=dict(color=color_mapping[cell], width=2),
+                        line=dict(color=self.sector_colors[cell], width=2),
                         hovertemplate=(
                             f"<b>®️ {cell}</b><br>"
                             f"<b>Date 🟰 </b> %{{x}}<br>"
@@ -901,7 +903,7 @@ class ChartGenerator:
         # Split charts by sectors in a horizontal row
         subplot_titles = [f"Sector {sector}" for sector in sectors]
         combined_chart = make_subplots(
-            rows=1, cols=len(charts), shared_yaxes=True, subplot_titles=subplot_titles
+            rows=1, cols=len(charts), shared_yaxes=False, subplot_titles=subplot_titles
         )
 
         for i, chart in enumerate(charts, start=1):
@@ -913,8 +915,10 @@ class ChartGenerator:
             height=400,  # Set a total height for the combined chart
             legend=dict(
                 orientation="h",
-                title=dict(font=dict(size=18, family="Vodafone", color="#5F6264")),
-                font=dict(size=16, family="Vodafone"),
+                title=dict(
+                    font=dict(size=18, family="Ericcson Hilda", color="#5F6264")
+                ),
+                font=dict(size=16, family="Ericcson Hilda"),
                 yanchor="bottom",
                 xanchor="left",
                 x=0.01,
@@ -922,6 +926,9 @@ class ChartGenerator:
                 bgcolor="rgba(255,255,255,0)",
                 bordercolor="rgba(0,0,0,0)",
                 borderwidth=0,
+                itemclick="toggleothers",
+                itemdoubleclick="toggle",
+                itemsizing="constant",
             ),
             paper_bgcolor="#F5F5F5",
             plot_bgcolor="#F5F5F5",
@@ -941,6 +948,91 @@ class ChartGenerator:
             container = st.container()
             with container:
                 st.plotly_chart(combined_chart, use_container_width=True)
+
+    def create_charts_prbau(self, df, x_param, y_param, sector_param, yaxis_range=None):
+        df = df.sort_values(by=x_param)
+        unique_sectors = sorted(df[sector_param].unique())
+
+        # Ensure consistent colors for each sector
+        if not hasattr(self, "sector_colors"):
+            self.sector_colors = {}
+
+        new_sectors = [
+            sector for sector in unique_sectors if sector not in self.sector_colors
+        ]
+        new_colors = self.get_colors(len(new_sectors))
+
+        self.sector_colors.update(
+            {sector: color for sector, color in zip(new_sectors, new_colors)}
+        )
+
+        # Determine y-axis range
+        if yaxis_range:
+            yaxis_range_config = dict(range=yaxis_range)
+        else:
+            yaxis_range_config = {}
+
+        fig = go.Figure()
+
+        for cell in unique_sectors:
+            cell_df = df[df[sector_param] == cell]
+            fig.add_trace(
+                go.Scatter(
+                    x=cell_df[x_param],
+                    y=cell_df[y_param],
+                    mode="lines",
+                    name=cell,
+                    line=dict(color=self.sector_colors[cell], width=2),
+                    hovertemplate=(
+                        f"<b>®️ {cell}</b><br>"
+                        f"<b>Date 🟰 </b> %{{x}}<br>"
+                        f"<b>{y_param} 🟰 </b> %{{y}}<br>"
+                        "<extra></extra>"
+                    ),
+                    hoverlabel=dict(font_size=14, font_family="Vodafone"),
+                )
+            )
+
+        fig.update_layout(
+            margin=dict(t=20, l=20, r=20, b=20),
+            xaxis_title=None,
+            yaxis_title=y_param,
+            width=900,
+            height=450,
+            yaxis=yaxis_range_config,
+            font=dict(size=20),
+            legend=dict(
+                title=dict(
+                    font=dict(size=18, family="Ericcson Hilda", color="#5F6264")
+                ),
+                font=dict(size=16, family="Ericcson Hilda"),
+                orientation="h",
+                yanchor="top",
+                y=-0.3,
+                xanchor="left",
+                x=0.01,
+                itemclick="toggleothers",
+                itemdoubleclick="toggle",
+                itemsizing="constant",
+            ),
+            paper_bgcolor="#F5F5F5",
+            plot_bgcolor="#F5F5F5",
+        )
+
+        with stylable_container(
+            key="container_with_border",
+            css_styles="""
+                {
+                    background-color: #F5F5F5;
+                    border: 2px solid rgba(49, 51, 63, 0.2);
+                    border-radius: 0.5rem;
+                    padding: calc(1em - 1px)
+                }
+                """,
+        ):
+            container = st.container()
+            with container:
+                st.plotly_chart(fig, use_container_width=True)
 
     # MARK: - End of line transform chart
     def create_charts_vswr(self, df, x1_param, x2_param, y_param, nename):
@@ -963,8 +1055,8 @@ class ChartGenerator:
                     marker_color=color_mapping[value],
                     hovertemplate=(
                         f"<b>®️ {value}</b><br>"
-                        f"<b>{y_param} 🟰 </b> %{{y}}<br>"
-                        f"<b>{x1_param} 🟰 </b> %{{x}}<br>"
+                        f"<b>{y_param}</b> 🟰  %{{y}}<br>"
+                        f"<b>{x1_param}</b> 🟰  %{{x}}<br>"
                         "<extra></extra>"
                     ),
                     hoverlabel=dict(font_size=14, font_family="Vodafone"),
@@ -983,7 +1075,6 @@ class ChartGenerator:
 
         fig.update_layout(
             barmode="group",
-            # xaxis_title=x1_param,
             yaxis_title=y_param,
             plot_bgcolor="#F5F5F5",
             paper_bgcolor="#F5F5F5",
@@ -994,7 +1085,7 @@ class ChartGenerator:
                 yanchor="bottom",
                 y=1.02,
                 xanchor="left",
-                x=0,
+                x=-0.1,
                 bgcolor="#F5F5F5",
                 bordercolor="#FFFFFF",
                 borderwidth=0,
@@ -1211,14 +1302,15 @@ class ChartGenerator:
             legend=dict(
                 orientation="h",
                 yanchor="top",
-                y=-0.3,
+                y=-0.1,
                 xanchor="center",
                 x=0.5,
                 bgcolor="#F5F5F5",
                 bordercolor="#F5F5F5",
                 itemclick="toggleothers",
                 itemdoubleclick="toggle",
-                font=dict(size=20),
+                itemsizing="constant",
+                font=dict(size=14),
             ),
             margin=dict(l=20, r=20, t=40, b=20),
         )
@@ -1582,7 +1674,7 @@ class App:
                         [-130, 0],
                         [0, 5],
                         [0, 20],
-                        [-120, -105],
+                        [-130, -90],
                     ]
 
                     # TAG: - Availability
@@ -1601,7 +1693,8 @@ class App:
                         x_param="DATE_ID",
                         y_param="Availability",
                         sector_param="EutranCell",
-                        yaxis_range=yaxis_ranges[0],
+                        # yaxis_range=yaxis_ranges[0],
+                        yaxis_range=None,
                         xrule=True,
                     )
 
@@ -1622,7 +1715,8 @@ class App:
                         y_param="RRC_SR",
                         sector_param="EutranCell",
                         y2_avg="CSSR",
-                        yaxis_range=yaxis_ranges[0],
+                        # yaxis_range=yaxis_ranges[0],
+                        yaxis_range=None,
                         xrule=True,
                     )
 
@@ -1644,7 +1738,8 @@ class App:
                         y_param="ERAB_SR",
                         sector_param="EutranCell",
                         y2_avg="CSSR",
-                        yaxis_range=yaxis_ranges[0],
+                        # yaxis_range=yaxis_ranges[0],
+                        yaxis_range=None,
                         xrule=True,
                     )
 
@@ -1666,7 +1761,8 @@ class App:
                         y_param="SSSR",
                         sector_param="EutranCell",
                         y2_avg="CSSR",
-                        yaxis_range=yaxis_ranges[0],
+                        # yaxis_range=yaxis_ranges[0],
+                        yaxis_range=None,
                         xrule=True,
                     )
 
@@ -1710,7 +1806,8 @@ class App:
                         y_param="avgcqinonhom",
                         sector_param="EutranCell",
                         y2_avg="CQI",
-                        yaxis_range=yaxis_ranges[4],
+                        # yaxis_range=yaxis_ranges[4],
+                        yaxis_range=None,
                         xrule=True,
                     )
 
@@ -1754,7 +1851,8 @@ class App:
                         y_param="Intra_HO_Exe_SR",
                         sector_param="EutranCell",
                         y2_avg="Intra Freq HOSR",
-                        yaxis_range=yaxis_ranges[0],
+                        # yaxis_range=yaxis_ranges[0],
+                        yaxis_range=None,
                         xrule=True,
                     )
 
@@ -1776,7 +1874,8 @@ class App:
                         y_param="Inter_HO_Exe_SR",
                         sector_param="EutranCell",
                         y2_avg="Inter Freq HOSR",
-                        yaxis_range=yaxis_ranges[0],
+                        # yaxis_range=yaxis_ranges[0],
+                        yaxis_range=None,
                         xrule=True,
                     )
 
@@ -1798,7 +1897,8 @@ class App:
                         y_param="UL_INT_PUSCH_y",
                         sector_param="EutranCell",
                         y2_avg="UL_INT_PUSCH_x",
-                        yaxis_range=yaxis_ranges[2],
+                        yaxis_range=yaxis_ranges[5],
+                        # yaxis_range=None,
                         yaxis_reverse=True,
                         xrule=True,
                     )
@@ -1961,7 +2061,7 @@ class App:
                     y_param="CQI",
                     sector_param="EUtranCellFDD",
                     yaxis_range=None,
-                    xrule=True,
+                    xrule=False,
                 )
 
                 # MARK: CQI 1st tier
@@ -1983,17 +2083,58 @@ class App:
                     except Exception as e:
                         st.write(f"An error occurred: {e!s}")
 
-                # TAG: - PRB & Active User
+                # TODO: - PRB Charts
+                # FLAG: - Update PRB for sectoral
+                col1, col2 = st.columns([1, 1])
+                con1 = col1.container()
+                con2 = col2.container()
+                with con1:
+                    st.markdown(
+                        *styling(
+                            f"📶 PRB Utilization Sectoral for Site {siteid}",
+                            font_size=24,
+                            text_align="left",
+                            tag="h6",
+                        )
+                    )
+
+                    # st.table(ltehourly_data)
+                    self.chart_generator.create_charts_prbau(
+                        df=ltehourly_data,
+                        # param="PRB Utilization",
+                        # site="Combined Sites",
+                        x_param="datetime",
+                        y_param="DL_Resource_Block_Utilizing_Rate",
+                        sector_param="EUtranCellFDD",
+                        yaxis_range=None,
+                    )
+                with con2:
+                    st.markdown(
+                        *styling(
+                            f"📶 Active User Sectoral for Site {siteid}",
+                            font_size=24,
+                            text_align="left",
+                            tag="h6",
+                        )
+                    )
+                    self.chart_generator.create_charts_prbau(
+                        df=ltehourly_data,
+                        # param="Active User",
+                        # site="Combined Sites",
+                        x_param="datetime",
+                        y_param="Active User",
+                        sector_param="EUtranCellFDD",
+                        yaxis_range=None,
+                    )
+
                 st.markdown(
                     *styling(
-                        f"📶 PRB Utilization Sectoral for Site {siteid}",
+                        f"📶 PRB Utilization Site {siteid}",
                         font_size=24,
                         text_align="left",
                         tag="h6",
                     )
                 )
-                # TODO: - PRB Charts
-                # st.table(ltehourly_data)
                 self.chart_generator.create_charts_hourly(
                     df=ltehourly_data,
                     param="PRB Utilization",
@@ -2003,10 +2144,9 @@ class App:
                     sector_param="EUtranCellFDD",
                     yaxis_range=None,
                 )
-
                 st.markdown(
                     *styling(
-                        f"📶 Active User Sectoral for {siteid}",
+                        f"📶 Active User Site {siteid}",
                         font_size=24,
                         text_align="left",
                         tag="h6",
@@ -2021,6 +2161,7 @@ class App:
                     sector_param="EUtranCellFDD",
                     yaxis_range=None,
                 )
+
                 # Fetch VSWR data
 
                 # TAG: - VSWR
@@ -2374,7 +2515,6 @@ class App:
                         else:
                             st.error(f"Path does not exist: {folder}")
 
-                # TODO : IMAGE STATIC
                 with col1:
                     st.markdown(
                         *styling(
