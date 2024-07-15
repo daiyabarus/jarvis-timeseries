@@ -2444,7 +2444,9 @@ class App:
                                 for img in existing_images:
                                     st.image(img, caption=None, use_column_width=True)
                             else:
-                                st.error("No Functionality Test for Sector 1.")
+                                st.error(
+                                    "No Functionality Test for Sector 1. (gridsec1, speedtestsec1, gridservicemodesec1, servicemodesec1)"
+                                )
                         else:
                             st.error(f"Path does not exist: {folder}")
 
@@ -2502,7 +2504,9 @@ class App:
                                 for img in existing_images:
                                     st.image(img, caption=None, use_column_width=True)
                             else:
-                                st.error("No Functionality Test for Sector 2.")
+                                st.error(
+                                    "No Functionality Test for Sector 2. (gridsec2, speedtestsec2, gridservicemodesec2, servicemodesec2)"
+                                )
                         else:
                             st.error(f"Path does not exist: {folder}")
 
@@ -2535,15 +2539,6 @@ class App:
                                 tag="h6",
                             )
                         )
-                        if os.path.exists(folder):
-                            gridsec3 = os.path.join(folder, "gridsec3.jpg")
-                            speedtestsec3 = os.path.join(folder, "speedtestsec3.jpg")
-                            servicemodesec3 = os.path.join(
-                                folder, "servicemodesec3.jpg"
-                            )
-                            gridservicemodesec3 = os.path.join(
-                                folder, "gridservicemodesec3.jpg"
-                            )
 
                         if os.path.exists(folder):
                             gridsec3 = os.path.join(folder, "gridsec3.jpg")
@@ -2551,7 +2546,7 @@ class App:
                             servicemodesec3 = os.path.join(
                                 folder, "servicemodesec3.jpg"
                             )
-                            gridservicemodesec2 = os.path.join(
+                            gridservicemodesec3 = os.path.join(
                                 folder, "gridservicemodesec3.jpg"
                             )
 
@@ -2570,7 +2565,9 @@ class App:
                                 for img in existing_images:
                                     st.image(img, caption=None, use_column_width=True)
                             else:
-                                st.error("No Functionality Test for Sector 3.")
+                                st.error(
+                                    "No Functionality Test for Sector 3. (gridsec3, speedtestsec3, gridservicemodesec3, servicemodesec3)"
+                                )
                         else:
                             st.error(f"Path does not exist: {folder}")
 
