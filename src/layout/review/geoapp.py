@@ -123,36 +123,11 @@ class GeoApp:
 
         geocell_layer.add_to(self.map)
 
-    def create_popup_content(self, row):
-        return f"""
-        <div style="font-family: Arial; font-size: 16px;">
-            <b>Site:</b> {row['Site_ID']}<br>
-            <b>Cell:</b> {row['Cell_Name']}<br>
-            <b>CI:</b> {row['cellId']}
-        </div>
-        """
-
-    def add_sector_polygon(self, row, color, layer):
-        sector_polygon = self.create_sector_polygon(
-            row["Latitude"],
-            row["Longitude"],
-            row["Dir"],
-            row["Ant_BW"],
-            row["Ant_Size"],
-        )
-        folium.Polygon(
-            locations=sector_polygon,
-            color="black",
-            fill=True,
-            fill_color=color,
-            fill_opacity=1.0,
-        ).add_to(layer)
-
     def add_circle_marker(self, row, color, layer):
         popup_content = self.create_popup_content(row)
         folium.CircleMarker(
             location=[row["Latitude"], row["Longitude"]],
-            radius=6,
+            radius=1,
             popup=folium.Popup(popup_content, max_width=250),
             color=color,
             fill=True,
@@ -165,7 +140,7 @@ class GeoApp:
             location=[row["Latitude"], row["Longitude"]],
             popup=row["Site_ID"],
             icon=folium.DivIcon(
-                html=f'<div style="font-size: 24pt; color: red">{row["Site_ID"]}</div>'
+                html=f'<div style="font-size: 12pt; color: red">{row["Site_ID"]}</div>'
             ),
         ).add_to(layer)
 
@@ -177,9 +152,16 @@ class GeoApp:
                 color = self.get_ci_color(row["ci"])
             else:
                 color = self.get_rsrp_color(row["rsrp_mean"])
-            folium.CircleMarker(
-                location=[row["lat_grid"], row["long_grid"]],
-                radius=4,
+
+            # Define the bounds of the rectangle
+            lat = row["lat_grid"]
+            lon = row["long_grid"]
+            size = 0.000165  # Adjust this value to change the size of the rectangle
+
+            bounds = [[lat - size, lon - size], [lat + size, lon + size]]
+
+            folium.Rectangle(
+                bounds=bounds,
                 popup=f"CI: {row['ci']} RSRP: {row['rsrp_mean']} dBm",
                 color=color,
                 fill=True,
@@ -208,6 +190,31 @@ class GeoApp:
                     weight=1,
                     opacity=0.5,
                 ).add_to(self.map)
+
+    def create_popup_content(self, row):
+        return f"""
+        <div style="font-family: Arial; font-size: 16px;">
+            <b>Site:</b> {row['Site_ID']}<br>
+            <b>Cell:</b> {row['Cell_Name']}<br>
+            <b>CI:</b> {row['cellId']}
+        </div>
+        """
+
+    def add_sector_polygon(self, row, color, layer):
+        sector_polygon = self.create_sector_polygon(
+            row["Latitude"],
+            row["Longitude"],
+            row["Dir"],
+            row["Ant_BW"],
+            row["Ant_Size"],
+        )
+        folium.Polygon(
+            locations=sector_polygon,
+            color="black",
+            fill=True,
+            fill_color=color,
+            fill_opacity=1.0,
+        ).add_to(layer)
 
     def display_map(self):
         folium.LayerControl().add_to(self.map)

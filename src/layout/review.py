@@ -1,8 +1,8 @@
 import os
 
-import altair as alt
 import numpy as np
 import pandas as pd
+import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 import streamlit_antd_components as sac
@@ -80,7 +80,7 @@ class StreamlitInterface:
         if "date_range" not in st.session_state:
             st.session_state["date_range"] = (
                 pd.Timestamp.today() - pd.DateOffset(months=3),
-                pd.Timestamp.today() - pd.Timedelta(days=1),
+                pd.Timestamp.today(),
             )
 
         date_range = date_range_picker(
@@ -115,7 +115,7 @@ class QueryManager:
         query = text(
             """
         SELECT "Site_ID", "NODE_ID", "NE_ID", "Cell_Name", "Longitude", "Latitude", "Dir", "Ant_BW",
-               "Ant_Size", "cellId", "eNBId", "MC_class", "KABUPATEN", "LTE"
+               "Ant_Size", "cellId", "eNBId", "KABUPATEN", "LTE"
         FROM mcom
         WHERE "Site_ID" LIKE :siteid
         """
@@ -198,7 +198,7 @@ class QueryManager:
         like_conditions = " OR ".join(
             [f'"EUtranCellFDD" LIKE :site_{i}' for i in range(len(selected_sites))]
         )
-        start_date = end_date - pd.Timedelta(days=15)
+        start_date = pd.Timestamp("today") - pd.Timedelta(days=15)
         query = text(
             f"""
         SELECT
@@ -217,19 +217,19 @@ class QueryManager:
 
         return _self.fetch_data(query, params=params)
 
-    def get_target_data(self, city, mc_class, band):
+    def get_target_data(self, city, band):
         # def get_target_data(self, city, band):
         query = text(
             """
         SELECT *
         FROM target
-        WHERE "City" = :city AND "Band" = :band AND "MC Class" = :mc_class
+        WHERE "City" = :city AND "Band" = :band
         """
         )
         return self.fetch_data(
             # query, {"city": city, "mc_class": mc_class, "band": band}
             query,
-            {"city": city, "mc_class": mc_class, "band": band},
+            {"city": city, "band": band},
         )
 
     @st.cache_data(ttl=600)
@@ -383,6 +383,11 @@ class ChartGenerator:
         result.sort()
         return f"{param} {site}"
 
+    def get_headers(self, cells):
+        sectors = {f"Sector {input_string[-1]}" for input_string in cells}
+        sorted_sectors = sorted(sectors)
+        return ", ".join(sorted_sectors)
+
     def determine_sector(self, cell: str) -> int:
         sector_mapping = {
             "1": 1,
@@ -398,643 +403,6 @@ class ChartGenerator:
         last_char = cell[-1].upper()
         return sector_mapping.get(last_char, 0)
 
-    def create_charts(
-        self,
-        df,
-        param,
-        site,
-        x_param,
-        y_param,
-        sector_param,
-        yaxis_range=None,
-        xrule=None,
-    ):
-        sectors = sorted(df[sector_param].apply(self.determine_sector).unique())
-        color_mapping = {
-            cell: color
-            for cell, color in zip(
-                df[sector_param].unique(),
-                self.get_colors(len(df[sector_param].unique())),
-            )
-        }
-
-        charts = []
-        for sector in sectors:
-            sector_df = df[df[sector_param].apply(self.determine_sector) == sector]
-
-            if yaxis_range:
-                y_scale = alt.Scale(domain=yaxis_range)
-            else:
-                y_scale = alt.Scale()
-
-            sector_chart = (
-                alt.Chart(sector_df)
-                .mark_line()
-                .encode(
-                    x=alt.X(x_param, type="temporal", axis=alt.Axis(title=None)),
-                    y=alt.Y(
-                        y_param,
-                        type="quantitative",
-                        scale=y_scale,
-                        axis=alt.Axis(title=y_param),
-                    ),
-                    color=alt.Color(
-                        sector_param,
-                        scale=alt.Scale(
-                            domain=list(color_mapping.keys()),
-                            range=list(color_mapping.values()),
-                        ),
-                    ),
-                )
-                .properties(title=f"Sector {sector}", width=590, height=150)
-            )
-
-            # Add xrule to the chart if provided
-            if xrule:
-                xrule_chart = (
-                    alt.Chart(
-                        pd.DataFrame({"On Air Date": [st.session_state["xrule_date"]]})
-                    )
-                    .mark_rule(color="#F7BB00", strokeWidth=4, strokeDash=[10, 5])
-                    .encode(x="On Air Date:T")
-                )
-                sector_chart += xrule_chart
-
-            charts.append(sector_chart)
-
-        combined_chart = (
-            alt.hconcat(*charts, autosize="fit", background="#F5F5F5")
-            .configure_title(
-                fontSize=18,
-                anchor="middle",
-                font="Vodafone",
-                color="#717577",
-            )
-            .configure_legend(
-                orient="bottom",
-                titleFontSize=16,
-                labelFontSize=14,
-                labelFont="Vodafone",
-                titleColor="#5F6264",
-                padding=10,
-                titlePadding=10,
-                cornerRadius=10,
-                columns=6,
-                titleAnchor="start",
-                direction="vertical",
-                gradientLength=400,
-                labelLimit=0,
-                symbolSize=30,
-                symbolType="square",
-            )
-        )
-
-        with stylable_container(
-            key="container_with_border",
-            css_styles="""
-                {
-                    background-color: #F5F5F5;
-                    border: 2px solid rgba(49, 51, 63, 0.2);
-                    border-radius: 0.5rem;
-                    padding: calc(1em - 1px)
-                }
-                """,
-        ):
-            container = st.container()
-            with container:
-                st.altair_chart(combined_chart, use_container_width=True)
-
-    def create_charts_datums(
-        self,
-        df,
-        param,
-        site,
-        x_param,
-        y_param,
-        sector_param,
-        y2_avg,
-        yaxis_range=None,
-        yaxis_reverse=False,
-        xrule=None,
-    ):
-        sectors = sorted(df[sector_param].apply(self.determine_sector).unique())
-
-        color_mapping = {
-            cell: color
-            for cell, color in zip(
-                df[sector_param].unique(),
-                self.get_colors(len(df[sector_param].unique())),
-            )
-        }
-
-        charts = []
-        for sector in sectors:
-
-            sector_df = df[df[sector_param].apply(self.determine_sector) == sector]
-
-            if yaxis_range and yaxis_reverse:
-                y_scale = alt.Scale(zero=False, domain=yaxis_range, reverse=True)
-            elif yaxis_range:
-                y_scale = alt.Scale(domain=yaxis_range)
-            else:
-                y_scale = alt.Scale()
-
-            sector_chart = (
-                alt.Chart(sector_df)
-                .mark_line()
-                .encode(
-                    x=alt.X(x_param, type="temporal", axis=alt.Axis(title=None)),
-                    y=alt.Y(
-                        y_param,
-                        type="quantitative",
-                        scale=y_scale,
-                        axis=alt.Axis(title=y_param),
-                    ),
-                    color=alt.Color(
-                        sector_param,
-                        scale=alt.Scale(
-                            domain=list(color_mapping.keys()),
-                            range=list(color_mapping.values()),
-                        ),
-                    ),
-                )
-                .properties(title=f"Sector {sector}", width=600, height=150)
-            )
-
-            # Add y2_avg line rule to the chart
-            if y2_avg in sector_df.columns:
-                y2_avg_line = (
-                    alt.Chart(sector_df)
-                    .mark_rule(color="#F74B00", strokeDash=[10, 5], size=4, opacity=0.1)
-                    .encode(y=alt.Y(y2_avg, type="quantitative", title="with Baseline"))
-                )
-                sector_chart = alt.layer(y2_avg_line, sector_chart)
-
-            if xrule:
-                xrule_chart = (
-                    alt.Chart(
-                        pd.DataFrame({"On Air Date": [st.session_state["xrule_date"]]})
-                    )
-                    .mark_rule(color="#F7BB00", strokeWidth=4, strokeDash=[10, 5])
-                    .encode(x="On Air Date:T")
-                )
-                sector_chart += xrule_chart
-
-            charts.append(sector_chart)
-
-        combined_chart = (
-            alt.hconcat(*charts, autosize="fit", background="#F5F5F5")
-            .configure_title(
-                fontSize=18,
-                anchor="middle",
-                font="Vodafone",
-                color="#717577",
-            )
-            .configure_legend(
-                orient="bottom",
-                titleFontSize=16,
-                labelFontSize=14,
-                labelFont="Vodafone",
-                titleColor="#5F6264",
-                padding=10,
-                titlePadding=10,
-                cornerRadius=10,
-                columns=6,
-                titleAnchor="start",
-                direction="vertical",
-                gradientLength=400,
-                labelLimit=0,
-                symbolSize=30,
-                symbolType="square",
-            )
-        )
-
-        with stylable_container(
-            key="container_with_border",
-            css_styles="""
-                {
-                    background-color: #F5F5F5;
-                    border: 2px solid rgba(49, 51, 63, 0.2);
-                    border-radius: 0.5rem;
-                    padding: calc(1em - 1px)
-                }
-                """,
-        ):
-            container = st.container()
-            with container:
-                st.altair_chart(combined_chart, use_container_width=True)
-
-    def create_charts_area(
-        self,
-        df,
-        param,
-        site,
-        x_param,
-        y_param,
-        sector_param,
-        yaxis_range=None,
-        xrule=None,
-    ):
-        sectors = sorted(df[sector_param].apply(self.determine_sector).unique())
-        color_mapping = {
-            cell: color
-            for cell, color in zip(
-                df[sector_param].unique(),
-                self.get_colors(len(df[sector_param].unique())),
-            )
-        }
-
-        charts = []
-        for sector in sectors:
-            sector_df = df[df[sector_param].apply(self.determine_sector) == sector]
-            y_scale = alt.Scale(domain=yaxis_range) if yaxis_range else alt.Scale()
-
-            sector_chart = (
-                alt.Chart(sector_df)
-                .mark_area()
-                .encode(
-                    x=alt.X(x_param, type="temporal", axis=alt.Axis(title=None)),
-                    y=alt.Y(
-                        y_param,
-                        type="quantitative",
-                        scale=y_scale,
-                        axis=alt.Axis(title=y_param),
-                        stack="zero",
-                    ),
-                    color=alt.Color(
-                        sector_param,
-                        scale=alt.Scale(
-                            domain=list(color_mapping.keys()),
-                            range=list(color_mapping.values()),
-                        ),
-                    ),
-                )
-                .properties(title=f"Sector {sector}", width=600, height=150)
-            )
-
-            if xrule and "xrule_date" in st.session_state:
-                xrule_chart = (
-                    alt.Chart(
-                        pd.DataFrame({"On Air Date": [st.session_state["xrule_date"]]})
-                    )
-                    .mark_rule(color="#F7BB00", strokeWidth=4, strokeDash=[10, 5])
-                    .encode(x="On Air Date:T")
-                )
-                sector_chart += xrule_chart
-
-            charts.append(sector_chart)
-
-        combined_chart = (
-            alt.hconcat(*charts, autosize="fit", background="#F5F5F5")
-            .configure_title(
-                fontSize=18,
-                anchor="middle",
-                font="Vodafone",
-                color="#717577",
-            )
-            .configure_legend(
-                orient="bottom",
-                titleFontSize=16,
-                labelFontSize=14,
-                labelFont="Vodafone",
-                titleColor="#5F6264",
-                padding=10,
-                titlePadding=10,
-                cornerRadius=10,
-                columns=6,
-                titleAnchor="start",
-                direction="vertical",
-                gradientLength=400,
-                labelLimit=0,
-                symbolSize=30,
-                symbolType="square",
-            )
-        )
-
-        with stylable_container(
-            key="container_with_border",
-            css_styles="""
-                {
-                    background-color: #F5F5F5;
-                    border: 2px solid rgba(49, 51, 63, 0.2);
-                    border-radius: 0.5rem;
-                    padding: calc(1em - 1px)
-                }
-                """,
-        ):
-            container = st.container()
-            with container:
-                st.altair_chart(combined_chart, use_container_width=True)
-
-    def create_charts_neid(
-        self, df, param, site, x_param, y_param, neid, yaxis_range=None, xrule=None
-    ):
-        # Group by x_param and sum y_param values for each NEID
-        grouped_df = df.groupby([x_param, neid])[y_param].sum().reset_index()
-
-        color_mapping = {
-            cell: color
-            for cell, color in zip(
-                grouped_df[neid].unique(),
-                self.get_colors(len(grouped_df[neid].unique())),
-            )
-        }
-
-        # Determine y-axis range
-        if yaxis_range:
-            y_scale = alt.Scale(domain=yaxis_range)
-        else:
-            y_scale = alt.Scale()
-
-        base_chart = (
-            alt.Chart(grouped_df)
-            .mark_area()
-            .encode(
-                x=alt.X(x_param, type="temporal", axis=alt.Axis(title=None)),
-                y=alt.Y(
-                    y_param,
-                    type="quantitative",
-                    scale=y_scale,
-                    axis=alt.Axis(title=""),
-                    stack="zero",
-                ),
-                color=alt.Color(
-                    neid,
-                    scale=alt.Scale(
-                        domain=list(color_mapping.keys()),
-                        range=list(color_mapping.values()),
-                    ),
-                ),
-            )
-        )
-
-        if xrule:
-            xrule_chart = (
-                alt.Chart(
-                    pd.DataFrame({"On Air Date": [st.session_state["xrule_date"]]})
-                )
-                .mark_rule(color="#F7BB00", strokeWidth=4, strokeDash=[10, 5])
-                .encode(x="On Air Date:T")
-            )
-            chart = alt.layer(base_chart, xrule_chart)
-        else:
-            chart = base_chart
-
-        chart = (
-            chart.properties(
-                title="Payload Gbps",
-                height=350,
-                background="#F5F5F5",
-            )
-            .configure_title(
-                fontSize=18,
-                anchor="middle",
-                font="Vodafone",
-                color="#717577",
-            )
-            .configure_legend(
-                orient="bottom",
-                titleFontSize=16,
-                labelFontSize=14,
-                labelFont="Vodafone",
-                titleColor="#5F6264",
-                padding=10,
-                titlePadding=10,
-                cornerRadius=10,
-                columns=6,
-                titleAnchor="start",
-                direction="vertical",
-                gradientLength=400,
-                labelLimit=0,
-                symbolSize=30,
-                symbolType="square",
-            )
-            .configure_view(strokeWidth=0)
-        )
-
-        container = st.container()
-        with container:
-            st.altair_chart(chart, use_container_width=True)
-
-    # TODO: - transform to plotly
-    def create_charts_hourly(
-        self, df, param, site, x_param, y_param, sector_param, yaxis_range=None
-    ):
-        df = df.sort_values(by=x_param)
-        sectors = sorted(df[sector_param].apply(self.determine_sector).unique())
-
-        if not hasattr(self, "sector_colors"):
-            self.sector_colors = {}
-
-        new_sectors = [sector for sector in sectors if sector not in self.sector_colors]
-        new_colors = self.get_colors(len(new_sectors))
-
-        self.sector_colors.update(
-            {sector: color for sector, color in zip(new_sectors, new_colors)}
-        )
-
-        charts = []
-        for sector in sectors:
-            sector_df = df[df[sector_param].apply(self.determine_sector) == sector]
-
-            # Determine y-axis range
-            if yaxis_range:
-                yaxis_range_config = dict(range=yaxis_range)
-            else:
-                yaxis_range_config = {}
-
-            fig = go.Figure()
-
-            for cell in sector_df[sector_param].unique():
-                cell_df = sector_df[sector_df[sector_param] == cell]
-                fig.add_trace(
-                    go.Scatter(
-                        x=cell_df[x_param],
-                        y=cell_df[y_param],
-                        mode="lines",
-                        name=cell,
-                        line=dict(color=self.sector_colors[cell], width=2),
-                        hovertemplate=(
-                            f"<b>®️ {cell}</b><br>"
-                            f"<b>Date 🟰 </b> %{{x}}<br>"
-                            f"<b>{y_param} 🟰 </b> %{{y}}<br>"
-                            "<extra></extra>"
-                        ),
-                        hoverlabel=dict(font_size=14, font_family="Vodafone"),
-                    )
-                )
-
-            fig.update_layout(
-                xaxis_title=None,
-                yaxis_title=y_param,
-                width=600,
-                height=350,  # Updated height for each individual chart
-                yaxis=yaxis_range_config,
-                title=dict(
-                    text=f"Sector {sector}",
-                    font=dict(size=18, family="Ericcson Hilda", color="#717577"),
-                    xanchor="center",
-                    x=0.5,
-                ),
-                font=dict(size=20),
-                legend=dict(
-                    orientation="h",
-                    title=dict(
-                        font=dict(size=16, family="Ericcson Hilda", color="#5F6264")
-                    ),
-                    font=dict(size=20, family="Ericcson Hilda"),
-                    yanchor="bottom",
-                    xanchor="left",
-                    x=0.01,
-                    y=-0.5,
-                    bgcolor="rgba(255,255,255,0)",
-                    bordercolor="rgba(0,0,0,0)",
-                    borderwidth=0,
-                    itemclick="toggleothers",
-                    itemdoubleclick="toggle",
-                    itemsizing="constant",
-                ),
-                paper_bgcolor="#F5F5F5",
-                plot_bgcolor="#F5F5F5",
-            )
-
-            charts.append(fig)
-
-        # Split charts by sectors in a horizontal row
-        subplot_titles = [f"Sector {sector}" for sector in sectors]
-        combined_chart = make_subplots(
-            rows=1, cols=len(charts), shared_yaxes=False, subplot_titles=subplot_titles
-        )
-
-        for i, chart in enumerate(charts, start=1):
-            for trace in chart.data:
-                combined_chart.add_trace(trace, row=1, col=i)
-
-        combined_chart.update_layout(
-            autosize=True,
-            height=400,  # Set a total height for the combined chart
-            legend=dict(
-                orientation="h",
-                title=dict(
-                    font=dict(size=18, family="Ericcson Hilda", color="#5F6264")
-                ),
-                font=dict(size=16, family="Ericcson Hilda"),
-                yanchor="bottom",
-                xanchor="left",
-                x=0.01,
-                y=-0.7,
-                bgcolor="rgba(255,255,255,0)",
-                bordercolor="rgba(0,0,0,0)",
-                borderwidth=0,
-                itemclick="toggleothers",
-                itemdoubleclick="toggle",
-                itemsizing="constant",
-            ),
-            paper_bgcolor="#F5F5F5",
-            plot_bgcolor="#F5F5F5",
-        )
-
-        with stylable_container(
-            key="container_with_border",
-            css_styles="""
-                {
-                    background-color: #F5F5F5;
-                    border: 2px solid rgba(49, 51, 63, 0.2);
-                    border-radius: 0.5rem;
-                    padding: calc(1em - 1px)
-                }
-                """,
-        ):
-            container = st.container()
-            with container:
-                st.plotly_chart(combined_chart, use_container_width=True)
-
-    def create_charts_prbau(self, df, x_param, y_param, sector_param, yaxis_range=None):
-        df = df.sort_values(by=x_param)
-        unique_sectors = sorted(df[sector_param].unique())
-
-        # Ensure consistent colors for each sector
-        if not hasattr(self, "sector_colors"):
-            self.sector_colors = {}
-
-        new_sectors = [
-            sector for sector in unique_sectors if sector not in self.sector_colors
-        ]
-        new_colors = self.get_colors(len(new_sectors))
-
-        self.sector_colors.update(
-            {sector: color for sector, color in zip(new_sectors, new_colors)}
-        )
-
-        # Determine y-axis range
-        if yaxis_range:
-            yaxis_range_config = dict(range=yaxis_range)
-        else:
-            yaxis_range_config = {}
-
-        fig = go.Figure()
-
-        for cell in unique_sectors:
-            cell_df = df[df[sector_param] == cell]
-            fig.add_trace(
-                go.Scatter(
-                    x=cell_df[x_param],
-                    y=cell_df[y_param],
-                    mode="lines",
-                    name=cell,
-                    line=dict(color=self.sector_colors[cell], width=2),
-                    hovertemplate=(
-                        f"<b>®️ {cell}</b><br>"
-                        f"<b>Date 🟰 </b> %{{x}}<br>"
-                        f"<b>{y_param} 🟰 </b> %{{y}}<br>"
-                        "<extra></extra>"
-                    ),
-                    hoverlabel=dict(font_size=14, font_family="Vodafone"),
-                )
-            )
-
-        fig.update_layout(
-            margin=dict(t=20, l=20, r=20, b=20),
-            xaxis_title=None,
-            yaxis_title=y_param,
-            width=900,
-            height=450,
-            yaxis=yaxis_range_config,
-            font=dict(size=20),
-            legend=dict(
-                title=dict(
-                    font=dict(size=18, family="Ericcson Hilda", color="#5F6264")
-                ),
-                font=dict(size=16, family="Ericcson Hilda"),
-                orientation="h",
-                yanchor="top",
-                y=-0.3,
-                xanchor="left",
-                x=0.01,
-                itemclick="toggleothers",
-                itemdoubleclick="toggle",
-                itemsizing="constant",
-            ),
-            paper_bgcolor="#F5F5F5",
-            plot_bgcolor="#F5F5F5",
-        )
-
-        with stylable_container(
-            key="container_with_border",
-            css_styles="""
-                {
-                    background-color: #F5F5F5;
-                    border: 2px solid rgba(49, 51, 63, 0.2);
-                    border-radius: 0.5rem;
-                    padding: calc(1em - 1px)
-                }
-                """,
-        ):
-            container = st.container()
-            with container:
-                st.plotly_chart(fig, use_container_width=True)
-
-    # MARK: - End of line transform chart
     def create_charts_vswr(self, df, x1_param, x2_param, y_param, nename):
         # Calculate the average y_param for each combination of x1_param and x2_param
         avg_df = df.groupby([x1_param, x2_param])[y_param].mean().reset_index()
@@ -1059,18 +427,15 @@ class ChartGenerator:
                         f"<b>{x1_param}</b> 🟰  %{{x}}<br>"
                         "<extra></extra>"
                     ),
-                    hoverlabel=dict(font_size=14, font_family="Vodafone"),
+                    hoverlabel=dict(font_size=16, font_family="Vodafone"),
                 )
             )
 
             fig.add_hline(
                 y=1.3,
-                line_color="red",
-                line_dash="dot",
-                annotation_text="",
-                annotation_position="bottom right",
-                annotation_font_size=20,
-                annotation_font_color="blue",
+                line_dash="dashdot",
+                line_color="#F70000",
+                line_width=2,
             )
 
         fig.update_layout(
@@ -1100,45 +465,25 @@ class ChartGenerator:
             st.plotly_chart(fig, use_container_width=True)
 
     def cqiclusterchart(self, df, tier_data, xrule=None):
-        # Rename df columns for consistency
         df = df.rename(
             columns={"DATE_ID": "date", "EUtranCellFDD": "cellname", "CQI": "cqi"}
         )
 
-        # Convert date column to datetime format
         df["date"] = pd.to_datetime(df["date"])
-
-        # Get unique cellnames from tier_data
         unique_cellnames = tier_data["cellname"].unique()
-
-        # Get unique adjcellnames from tier_data
         unique_adjcellnames = tier_data["adjcellname"].unique()
-
-        # Combine unique_cellnames and unique_adjcellnames to get all unique names
         all_unique_names = np.unique(
             np.concatenate((unique_cellnames, unique_adjcellnames))
         )
-
-        # Generate colors for all unique names
         colors = self.get_colors(len(all_unique_names))
-
-        # Create color mapping for all unique names
         color_mapping = {name: color for name, color in zip(all_unique_names, colors)}
-
-        # Create subplots
         fig = make_subplots(rows=1, cols=len(unique_cellnames), shared_yaxes=True)
 
         for i, cellname in enumerate(unique_cellnames):
-            # Filter df for the current cellname
             baseline_chart1 = df[df["cellname"] == cellname]
-
-            # Sort baseline_chart1 by date
             baseline_chart1 = baseline_chart1.sort_values("date")
-            color = color_mapping.get(
-                cellname, "black"
-            )  # Default to black if not found
+            color = color_mapping.get(cellname, "black")
 
-            # Create dashdot line for cellname
             fig.add_trace(
                 go.Scatter(
                     x=baseline_chart1["date"],
@@ -1157,7 +502,6 @@ class ChartGenerator:
                 col=i + 1,
             )
 
-            # Get adjcellnames for the current cellname
             adjcellnames = tier_data[tier_data["cellname"] == cellname][
                 "adjcellname"
             ].unique()
@@ -1197,18 +541,18 @@ class ChartGenerator:
 
             if xrule:
                 fig.add_vline(
-                    x=xrule,
-                    line=dict(color="#F7BB00", width=4, dash="dash"),
+                    x=st.session_state["xrule"],
+                    line_width=2,
+                    line_dash="dash",
                     row=1,
                     col=i + 1,
                 )
-
-        # Update layout
         fig.update_layout(
             plot_bgcolor="#F5F5F5",
             paper_bgcolor="#F5F5F5",
-            font=dict(family="Vodafone", size=50, color="#717577"),
             margin=dict(l=20, r=20, t=40, b=20),
+            hoverlabel=dict(font_size=16, font_family="Vodafone"),
+            hovermode="x unified",
             height=350,
             showlegend=True,
             legend=dict(
@@ -1221,7 +565,8 @@ class ChartGenerator:
                 bordercolor="#F5F5F5",
                 itemclick="toggleothers",
                 itemdoubleclick="toggle",
-                font=dict(size=16),
+                itemsizing="constant",
+                font=dict(size=14),
             ),
         )
 
@@ -1236,7 +581,6 @@ class ChartGenerator:
                 }
                 """,
         ):
-            # Display the chart in Streamlit
             container = st.container()
             with container:
                 st.plotly_chart(fig, use_container_width=True)
@@ -1287,7 +631,7 @@ class ChartGenerator:
                         f"<b></b> %{{x}} - %{{y}}<br>"
                         "<extra></extra>"
                     ),
-                    hoverlabel=dict(font_size=14, font_family="Vodafone"),
+                    hoverlabel=dict(font_size=16, font_family="Vodafone"),
                 )
             )
 
@@ -1330,6 +674,549 @@ class ChartGenerator:
             with container:
                 st.plotly_chart(fig, use_container_width=True)
 
+    def create_charts_for_daily(
+        self, df, cell_name, x_param, y_param, xrule=False, yline=None
+    ):
+        df = df.sort_values(by=x_param)
+        df[y_param] = df[y_param].astype(float)
+        df = df[df[y_param] != 0]
+        df["sector"] = df[cell_name].apply(self.determine_sector)
+        color_mapping = {
+            cell: color
+            for cell, color in zip(
+                df[cell_name].unique(),
+                self.get_colors(len(df[cell_name].unique())),
+            )
+        }
+
+        sector_count = df["sector"].nunique()
+        cols = min(sector_count, 3)
+        columns = st.columns(cols)
+
+        for idx, sector in enumerate(sorted(df["sector"].unique())):
+            sector_data = df[df["sector"] == sector]
+            y_min = sector_data[sector_data[y_param] > 0][y_param].min()
+            y_max = sector_data[y_param].max()
+
+            with columns[idx % cols]:
+                with stylable_container(
+                    key=f"container_with_border_{sector}",
+                    css_styles="""
+                                {
+                                    background-color: #F5F5F5;
+                                    border: 2px solid rgba(49, 51, 63, 0.2);
+                                    border-radius: 0.5rem;
+                                    padding: calc(1em - 1px)
+                                }
+                                """,
+                ):
+                    container = st.container()
+                    with container:
+                        title = self.get_headers(sector_data[cell_name].unique())
+
+                        fig = go.Figure()
+
+                        for cell in sector_data[cell_name].unique():
+                            cell_data = sector_data[sector_data[cell_name] == cell]
+                            color = color_mapping[cell]
+
+                            fig.add_trace(
+                                go.Scatter(
+                                    x=cell_data[x_param],
+                                    y=cell_data[y_param],
+                                    mode="lines",
+                                    name=cell,
+                                    line=dict(color=color, width=2),
+                                    hovertemplate=(
+                                        f"<b>{cell}</b><br>"
+                                        f"<b>{y_param}:</b> %{{y}}<br>"
+                                        "<extra></extra>"
+                                    ),
+                                )
+                            )
+
+                        if yline:
+                            yline_value = sector_data[yline].mean()
+                            fig.add_hline(
+                                y=yline_value,
+                                line_dash="dashdot",
+                                line_color="#F70000",
+                                line_width=2,
+                            )
+                            # Adjust y_max if yline_value is greater
+                            if yline_value > y_max:
+                                y_max = yline_value
+                            elif yline_value < y_min:
+                                y_min = yline_value
+
+                        if xrule:
+                            fig.add_vline(
+                                x=st.session_state["xrule"],
+                                line_width=2,
+                                line_dash="dash",
+                                line_color="#808080",
+                            )
+
+                        # Adjust y_min to be slightly above zero if it is zero or negative
+                        adjusted_y_min = y_min if y_min > 0 else 0.01
+                        yaxis_range = [adjusted_y_min, y_max]
+
+                        fig.update_layout(
+                            margin=dict(t=20, l=20, r=20, b=20),
+                            title_text=title,
+                            title_x=0.4,
+                            template="plotly_white",
+                            hoverlabel=dict(font_size=16, font_family="Vodafone"),
+                            hovermode="x unified",
+                            legend=dict(
+                                orientation="h",
+                                yanchor="top",
+                                y=-0.4,
+                                xanchor="center",
+                                x=0.5,
+                                itemclick="toggleothers",
+                                itemdoubleclick="toggle",
+                                itemsizing="constant",
+                                font=dict(size=14),
+                            ),
+                            paper_bgcolor="#F5F5F5",
+                            plot_bgcolor="#F5F5F5",
+                            width=600,
+                            height=350,
+                            showlegend=True,
+                            yaxis=dict(range=yaxis_range),
+                        )
+
+                        st.plotly_chart(fig, use_container_width=True)
+
+    def create_charts_for_daily_reverse(
+        self, df, cell_name, x_param, y_param, xrule=False, yline=None, y_range=None
+    ):
+        df = df.sort_values(by=x_param)
+        df["sector"] = df[cell_name].apply(self.determine_sector)
+
+        # Convert y_param to float and exclude zero values
+        df[y_param] = df[y_param].astype(float)
+        df = df[df[y_param] != 0]
+
+        color_mapping = {
+            cell: color
+            for cell, color in zip(
+                df[cell_name].unique(),
+                self.get_colors(len(df[cell_name].unique())),
+            )
+        }
+
+        sector_count = df["sector"].nunique()
+        cols = min(sector_count, 3)
+        columns = st.columns(cols)
+
+        for idx, sector in enumerate(sorted(df["sector"].unique())):
+            sector_data = df[df["sector"] == sector]
+
+            y_min = sector_data[y_param].min()
+            y_max = sector_data[y_param].max()
+
+            with columns[idx % cols]:
+                with stylable_container(
+                    key=f"container_with_border_{sector}",
+                    css_styles="""
+                                {
+                                    background-color: #F5F5F5;
+                                    border: 2px solid rgba(49, 51, 63, 0.2);
+                                    border-radius: 0.5rem;
+                                    padding: calc(1em - 1px)
+                                }
+                                """,
+                ):
+                    container = st.container()
+                    with container:
+                        title = self.get_headers(sector_data[cell_name].unique())
+
+                        fig = go.Figure()
+
+                        for cell in sector_data[cell_name].unique():
+                            cell_data = sector_data[sector_data[cell_name] == cell]
+                            color = color_mapping[cell]
+
+                            fig.add_trace(
+                                go.Scatter(
+                                    x=cell_data[x_param],
+                                    y=cell_data[y_param],
+                                    mode="lines",
+                                    name=cell,
+                                    line=dict(color=color, width=2),
+                                    hovertemplate=(
+                                        f"<b>{cell}</b><br>"
+                                        f"<b>{y_param}:</b> %{{y}}<br>"
+                                        f"<b>MC Class:</b> %{{customdata[0]}}<br>"
+                                        f"<b>Band:</b> %{{customdata[1]}}<br>"
+                                        f"<b>City:</b> %{{customdata[2]}}<br>"
+                                        "<extra></extra>"
+                                    ),
+                                    customdata=np.stack(
+                                        (
+                                            cell_data["MC Class"],
+                                            cell_data["Band"],
+                                            cell_data["City"],
+                                        ),
+                                        axis=-1,
+                                    ),
+                                )
+                            )
+
+                        if yline:
+                            yline_value = sector_data[yline].mean()
+                            fig.add_hline(
+                                y=yline_value,
+                                line_dash="dashdot",
+                                line_color="#F70000",
+                                line_width=2,
+                            )
+                            # Adjust y_max if yline_value is greater
+                            if yline_value > y_max:
+                                y_max = yline_value
+
+                        if xrule:
+                            fig.add_vline(
+                                x=st.session_state["xrule"],
+                                line_width=2,
+                                line_dash="dash",
+                                line_color="#808080",
+                            )
+
+                        yaxis_range = [y_max, y_min]
+
+                        fig.update_layout(
+                            margin=dict(t=20, l=20, r=20, b=20),
+                            title_text=title,
+                            title_x=0.4,
+                            template="plotly_white",
+                            hoverlabel=dict(font_size=16, font_family="Vodafone"),
+                            hovermode="x unified",
+                            legend=dict(
+                                orientation="h",
+                                yanchor="top",
+                                y=-0.2,
+                                xanchor="center",
+                                x=0.5,
+                                itemclick="toggleothers",
+                                itemdoubleclick="toggle",
+                                itemsizing="constant",
+                                font=dict(size=16),
+                            ),
+                            paper_bgcolor="#F5F5F5",
+                            plot_bgcolor="#F5F5F5",
+                            width=600,
+                            height=350,
+                            showlegend=True,
+                            yaxis=dict(autorange="reversed", range=yaxis_range),
+                        )
+
+                        st.plotly_chart(fig, use_container_width=True)
+
+    def create_charts_for_stacked_area(
+        self, df, cell_name, x_param, y_param, xrule=False, yline=None, y_range=None
+    ):
+        df = df.sort_values(by=x_param)
+        df[y_param] = df[y_param].astype(float)
+        df["sector"] = df[cell_name].apply(self.determine_sector)
+        color_mapping = {
+            cell: color
+            for cell, color in zip(
+                df[cell_name].unique(),
+                self.get_colors(len(df[cell_name].unique())),
+            )
+        }
+
+        sector_count = df["sector"].nunique()
+        cols = min(sector_count, 3)
+        columns = st.columns(cols)
+
+        for idx, sector in enumerate(sorted(df["sector"].unique())):
+            sector_data = df[df["sector"] == sector]
+
+            with columns[idx % cols]:
+                with stylable_container(
+                    key=f"container_with_border_{sector}",
+                    css_styles="""
+                            {
+                                background-color: #F5F5F5;
+                                border: 2px solid rgba(49, 51, 63, 0.2);
+                                border-radius: 0.5rem;
+                                padding: calc(1em - 1px)
+                            }
+                            """,
+                ):
+                    container = st.container()
+                    with container:
+                        title = self.get_headers(sector_data[cell_name].unique())
+
+                        fig = px.area(
+                            sector_data,
+                            x=x_param,
+                            y=y_param,
+                            color=cell_name,
+                            color_discrete_map=color_mapping,
+                            hover_data={
+                                cell_name: True,
+                                y_param: True,
+                            },
+                        )
+                        fig.update_traces(
+                            hovertemplate=f"<b>{cell_name}:</b> %{{customdata[0]}}<br><b>{y_param}:</b> %{{y}}<extra></extra>"
+                        )
+                        if yline:
+                            yline_value = sector_data[yline].mean()
+                            fig.add_hline(
+                                y=yline_value,
+                                line_dash="dot",
+                                line_color="#F70000",
+                                line_width=2,
+                            )
+
+                        if xrule:
+                            fig.add_vline(
+                                x=st.session_state["xrule"],
+                                line_width=2,
+                                line_dash="dash",
+                                line_color="#808080",
+                            )
+
+                        fig.update_layout(
+                            margin=dict(t=20, l=20, r=20, b=20),
+                            title_text=title,
+                            title_x=0.4,
+                            template="plotly_white",
+                            hoverlabel=dict(font_size=16, font_family="Vodafone"),
+                            hovermode="x unified",
+                            legend=dict(
+                                orientation="h",
+                                yanchor="top",
+                                y=-0.5,
+                                xanchor="center",
+                                x=0.5,
+                                itemclick="toggleothers",
+                                itemdoubleclick="toggle",
+                                itemsizing="constant",
+                                font=dict(size=16),
+                                title=None,
+                            ),
+                            paper_bgcolor="#F5F5F5",
+                            plot_bgcolor="#F5F5F5",
+                            width=600,
+                            height=350,
+                            showlegend=True,
+                            yaxis=dict(range=y_range) if y_range else None,
+                        )
+
+                        st.plotly_chart(fig, use_container_width=True)
+
+    def create_charts_for_stacked_area_neid(
+        self, df, neid, x_param, y_param, xrule=False
+    ):
+        df[y_param] = df[y_param].astype(float)
+        df_agg = df.groupby([x_param, neid], as_index=False)[y_param].sum()
+
+        df_agg = df_agg.sort_values(by=x_param)
+
+        color_mapping = {
+            cell: color
+            for cell, color in zip(
+                df_agg[neid].unique(),
+                self.get_colors(len(df_agg[neid].unique())),
+            )
+        }
+
+        container = st.container()
+        with container:
+            fig = px.area(
+                df_agg,
+                x=x_param,
+                y=y_param,
+                color=neid,
+                color_discrete_map=color_mapping,
+                hover_data={neid: True, y_param: True},
+            )
+
+            fig.update_traces(
+                hovertemplate=f"<b>{neid}:</b> %{{customdata[0]}}<br><b>{y_param}:</b> %{{y}}<extra></extra>"
+            )
+
+            fig.update_layout(
+                xaxis_title=None,
+                yaxis_title=None,
+                margin=dict(t=20, l=20, r=20, b=20),
+                template="plotly_white",
+                hoverlabel=dict(font_size=16, font_family="Vodafone"),
+                hovermode="x unified",
+                legend=dict(
+                    orientation="h",
+                    yanchor="top",
+                    y=-0.2,
+                    xanchor="center",
+                    x=0.5,
+                    itemclick="toggleothers",
+                    itemdoubleclick="toggle",
+                    itemsizing="constant",
+                    font=dict(size=16),
+                    title=None,
+                ),
+                paper_bgcolor="#F5F5F5",
+                plot_bgcolor="#F5F5F5",
+                width=600,
+                height=350,
+                showlegend=True,
+            )
+
+            if xrule:
+                fig.add_vline(
+                    x=st.session_state["xrule"],
+                    line_width=2,
+                    line_dash="dash",
+                    line_color="#808080",
+                )
+
+            st.plotly_chart(fig, use_container_width=True)
+
+    def create_charts_for_mulsec(self, df, cell_name, x_param, y_param, y_param2):
+        try:
+            # Check if 'mulsec_category' column exists
+            if "mulsec_category" not in df.columns:
+                st.error("The site does not have a multisector.")
+                return
+
+            # Check if all values in 'mulsec_category' are None
+            if df["mulsec_category"].isna().all():
+                st.error("The site does not have a multisector.")
+                return
+
+            # Filter out rows where mulsec_category is None
+            df = df[df["mulsec_category"].notna()]
+
+            # Sort and convert the y_param and y_param2 columns to float
+            df = df.sort_values(by=x_param)
+            df[y_param] = df[y_param].astype(float)
+            df[y_param2] = df[y_param2].astype(float)
+
+            unique_cells = df[cell_name].unique().tolist()
+
+            color_mapping = {
+                cell: color
+                for cell, color in zip(
+                    df[cell_name].unique(),
+                    self.get_colors(len(df[cell_name].unique())),
+                )
+            }
+
+            mulsec_groups = df.groupby("mulsec_category")
+            num_groups = len(mulsec_groups)
+
+            # Determine the number of columns
+            cols = num_groups
+            rows = 2
+
+            fig = make_subplots(
+                rows=rows,
+                cols=cols,
+                subplot_titles=[
+                    f"{group} - PRB Utilization" for group, _ in mulsec_groups
+                ]
+                + [f"{group} - Active Users" for group, _ in mulsec_groups],
+                shared_xaxes=True,
+                vertical_spacing=0.1,
+                horizontal_spacing=0.03,
+            )
+
+            for idx, (mulsec, group) in enumerate(mulsec_groups):
+                col = idx + 1
+
+                for cell in group[cell_name].unique():
+                    cell_data = group[group[cell_name] == cell]
+                    color = color_mapping[cell]
+
+                    # Plot y_param in the first row
+                    fig.add_trace(
+                        go.Scatter(
+                            x=cell_data[x_param],
+                            y=cell_data[y_param],
+                            mode="lines",
+                            name=cell,
+                            line=dict(color=color, width=2),
+                            legendgroup=cell,
+                            hovertemplate=(
+                                f"<b>{cell}</b><br>"
+                                f"<b>{y_param}:</b> %{{y}}<br>"
+                                "<extra></extra>"
+                            ),
+                        ),
+                        row=1,
+                        col=col,
+                    )
+
+                    # Plot y_param2 in the second row
+                    fig.add_trace(
+                        go.Scatter(
+                            x=cell_data[x_param],
+                            y=cell_data[y_param2],
+                            mode="lines",
+                            name=f"{cell} ({y_param2})",
+                            line=dict(color=color, width=2),
+                            legendgroup=cell,
+                            showlegend=False,
+                            hovertemplate=(
+                                f"<b>{cell}</b><br>"
+                                f"<b>{y_param2}:</b> %{{y}}<br>"
+                                "<extra></extra>"
+                            ),
+                        ),
+                        row=2,
+                        col=col,
+                    )
+
+            fig.update_layout(
+                showlegend=True,
+                height=700,
+                template="plotly_white",
+                hovermode="x unified",
+                margin=dict(l=20, r=20, t=20, b=5),
+                hoverlabel=dict(font_size=16, font_family="Vodafone"),
+                legend=dict(
+                    orientation="h",
+                    yanchor="top",
+                    y=-0.1,
+                    xanchor="center",
+                    x=0.5,
+                    itemclick="toggleothers",
+                    itemdoubleclick="toggle",
+                    itemsizing="constant",
+                    font=dict(size=14),
+                    title=None,
+                ),
+                paper_bgcolor="#F5F5F5",
+                plot_bgcolor="#F5F5F5",
+            )
+
+            with stylable_container(
+                key="container_with_border",
+                css_styles="""
+                    {
+                        background-color: #F5F5F5;
+                        border: 2px solid rgba(49, 51, 63, 0.2);
+                        border-radius: 0.5rem;
+                        padding: calc(1em - 1px)
+                    }
+                    """,
+            ):
+                container = st.container()
+                with container:
+                    st.plotly_chart(fig, use_container_width=True)
+
+        except KeyError as e:
+            st.error(f"KeyError: {e}")
+        except Exception as e:
+            st.error(f"An error occurred: {e}")
+
 
 class App:
     def __init__(self):
@@ -1355,6 +1242,102 @@ class App:
         current_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(os.path.dirname(current_dir))
         assets_image = os.path.join(project_root, "assets/")
+
+        # MARK: apply mulsec logic to dataframe
+        st.cache_data(ttl=1200)
+
+        def add_mulsec_category(df):
+            def get_mulsec_category(cell, cells):
+                try:
+                    cell = cell.upper()
+                    cells_upper = [c.upper() for c in cells]
+
+                    if cell.endswith(("MT04", "MT4")) and any(
+                        c.endswith(("MT01", "MT1")) for c in cells_upper
+                    ):
+                        return "MULSEC LTE 900 SEC 1", ("MT01", "MT1")
+                    elif cell.endswith(("MT05", "MT5")) and any(
+                        c.endswith(("MT02", "MT2")) for c in cells_upper
+                    ):
+                        return "MULSEC LTE 900 SEC 2", ("MT02", "MT2")
+                    elif cell.endswith(("MT06", "MT6")) and any(
+                        c.endswith(("MT03", "MT3")) for c in cells_upper
+                    ):
+                        return "MULSEC LTE 900 SEC 3", ("MT03", "MT3")
+                    elif cell.endswith(("ML04", "ML4")) and any(
+                        c.endswith(("ML01", "ML1")) for c in cells_upper
+                    ):
+                        return "MULSEC LTE 1800 SEC 1", ("ML01", "ML1")
+                    elif cell.endswith(("ML05", "ML5")) and any(
+                        c.endswith(("ML02", "ML2")) for c in cells_upper
+                    ):
+                        return "MULSEC LTE 1800 SEC 2", ("ML02", "ML2")
+                    elif cell.endswith(("ML06", "ML6")) and any(
+                        c.endswith(("ML03", "ML3")) for c in cells_upper
+                    ):
+                        return "MULSEC LTE 1800 SEC 3", ("ML03", "ML3")
+                    elif cell.endswith(("MR04", "MR4")) and any(
+                        c.endswith(("MR01", "MR1")) for c in cells_upper
+                    ):
+                        return "MULSEC LTE 2100 SEC 1", ("MR01", "MR1")
+                    elif cell.endswith(("MR05", "MR5")) and any(
+                        c.endswith(("MR02", "MR2")) for c in cells_upper
+                    ):
+                        return "MULSEC LTE 2100 SEC 2", ("MR02", "MR2")
+                    elif cell.endswith(("MR06", "MR6")) and any(
+                        c.endswith(("MR03", "MR3")) for c in cells_upper
+                    ):
+                        return "MULSEC LTE 2100 SEC 3", ("MR03", "MR3")
+                    else:
+                        return None, None
+                except Exception as e:
+                    print(f"Error in get_mulsec_category: {e}")
+                    return None, None
+
+            def find_partner_and_assign(df, cell, category, partner_suffixes):
+                try:
+                    cell_upper = cell.upper()
+                    partner_cells = [
+                        c
+                        for c in df["EUtranCellFDD"]
+                        if any(
+                            c.upper().endswith(suffix) for suffix in partner_suffixes
+                        )
+                    ]
+                    if partner_cells:
+                        df.loc[
+                            df["EUtranCellFDD"].str.upper() == cell_upper,
+                            "mulsec_category",
+                        ] = category
+                        df.loc[
+                            df["EUtranCellFDD"]
+                            .str.upper()
+                            .isin([p.upper() for p in partner_cells]),
+                            "mulsec_category",
+                        ] = category
+                except KeyError as e:
+                    print(f"KeyError in find_partner_and_assign: {e}")
+                except Exception as e:
+                    print(f"Error in find_partner_and_assign: {e}")
+
+            try:
+                # Ensure 'mulsec_category' column exists
+                if "mulsec_category" not in df.columns:
+                    df["mulsec_category"] = None
+
+                # First pass to determine all possible mulsec categories
+                for cell in df["EUtranCellFDD"]:
+                    category, partner_suffixes = get_mulsec_category(
+                        cell, df["EUtranCellFDD"]
+                    )
+                    if category:
+                        find_partner_and_assign(df, cell, category, partner_suffixes)
+            except KeyError as e:
+                print(f"KeyError in add_mulsec_category: {e}")
+            except Exception as e:
+                print(f"Error in add_mulsec_category: {e}")
+
+            return df
 
         (
             col1,
@@ -1391,7 +1374,6 @@ class App:
                 def load_tier_data(tier_path):
                     try:
                         tier_data = pd.read_csv(tier_path)
-                        st.write("Successfully loaded tier.csv")
                     except FileNotFoundError:
                         st.error(f"File does not exist: {tier_path}")
                         tier_data = None
@@ -1406,7 +1388,6 @@ class App:
                 def load_isd_data(isd_path):
                     try:
                         isd_data = pd.read_csv(isd_path)
-                        st.write("Successfully loaded isd.csv")
                     except FileNotFoundError:
                         st.error(f"File does not exist: {isd_path}")
                         isd_data = None
@@ -1420,7 +1401,6 @@ class App:
 
                 def calculate_rf(df_isd_data, df_tastate_data):
                     try:
-                        # Perform arithmetic operations
                         df_isd_data["ta_overshoot"] = df_isd_data["isd"] + (
                             0.1 * df_isd_data["isd"]
                         )
@@ -1429,7 +1409,6 @@ class App:
                             0.2 * df_isd_data["isd"]
                         )
 
-                        # Merge the dataframes
                         df_merged = pd.merge(
                             df_isd_data,
                             df_tastate_data,
@@ -1437,7 +1416,6 @@ class App:
                             right_on=["ci", "enodebid"],
                         )
 
-                        # Apply conditional logic for 'final_ta_status'
                         conditions = [
                             (df_merged["isd"] > 5),
                             (df_merged["perc90_ta_distance_km"] > df_merged["isd"]),
@@ -1592,7 +1570,6 @@ class App:
                     con1 = col1.container(border=True)
                     con2 = col2.container(border=True)
 
-                    # Display images or messages
                     if os.path.exists(folder):
                         display_image_or_message(
                             con1, folder, "naura.jpg", "Please upload the image"
@@ -1607,12 +1584,12 @@ class App:
                     self.dataframe_manager.add_dataframe(
                         f"mcom_data_{siteid}", mcom_data
                     )
-                    # st.write(mcom_data)
+                    # st.table(mcom_data)
 
                     for _, row in mcom_data.iterrows():
                         target_data = self.query_manager.get_target_data(
                             row["KABUPATEN"],
-                            row["MC_class"],
+                            # row["MC_class"],
                             row["LTE"],
                         )
                         target_data["EutranCell"] = row["Cell_Name"]
@@ -1668,16 +1645,7 @@ class App:
                         "combined_target_ltedaily_data", combined_target_ltedaily_df
                     )
 
-                    yaxis_ranges = [
-                        [0, 105],
-                        [50, 105],
-                        [-130, 0],
-                        [0, 5],
-                        [0, 20],
-                        [-130, -90],
-                    ]
-
-                    # TAG: - Availability
+                    # FLAG: Start Charts
                     st.markdown(
                         *styling(
                             f"📶 Service Availability for Site {siteid}",
@@ -1686,19 +1654,13 @@ class App:
                             tag="h6",
                         )
                     )
-                    self.chart_generator.create_charts(
-                        df=combined_ltedaily_df,
-                        param="Availability",
-                        site="Combined Sites",
+                    self.chart_generator.create_charts_for_daily(
+                        df=combined_target_ltedaily_df,
+                        cell_name="EutranCell",
                         x_param="DATE_ID",
                         y_param="Availability",
-                        sector_param="EutranCell",
-                        # yaxis_range=yaxis_ranges[0],
-                        yaxis_range=None,
                         xrule=True,
                     )
-
-                    # TAG: - RRC Setup Success Rate
                     st.markdown(
                         *styling(
                             f"📶 RRC Success Rate for Site {siteid}",
@@ -1707,16 +1669,14 @@ class App:
                             tag="h6",
                         )
                     )
-                    self.chart_generator.create_charts_datums(
+
+                    # FLAG: - create_charts_for_daily
+                    self.chart_generator.create_charts_for_daily(
                         df=combined_target_ltedaily_df,
-                        param="RRC Setup Success Rate",
-                        site="Combined Sites",
+                        cell_name="EutranCell",
                         x_param="DATE_ID",
                         y_param="RRC_SR",
-                        sector_param="EutranCell",
-                        y2_avg="CSSR",
-                        # yaxis_range=yaxis_ranges[0],
-                        yaxis_range=None,
+                        yline="CSSR",
                         xrule=True,
                     )
 
@@ -1730,16 +1690,12 @@ class App:
                         )
                     )
 
-                    self.chart_generator.create_charts_datums(
+                    self.chart_generator.create_charts_for_daily(
                         df=combined_target_ltedaily_df,
-                        param="RRC Setup Success Rate",
-                        site="Combined Sites",
+                        cell_name="EutranCell",
                         x_param="DATE_ID",
                         y_param="ERAB_SR",
-                        sector_param="EutranCell",
-                        y2_avg="CSSR",
-                        # yaxis_range=yaxis_ranges[0],
-                        yaxis_range=None,
+                        yline="CSSR",
                         xrule=True,
                     )
 
@@ -1753,16 +1709,12 @@ class App:
                         )
                     )
 
-                    self.chart_generator.create_charts_datums(
+                    self.chart_generator.create_charts_for_daily(
                         df=combined_target_ltedaily_df,
-                        param="RRC Setup Success Rate",
-                        site="Combined Sites",
+                        cell_name="EutranCell",
                         x_param="DATE_ID",
                         y_param="SSSR",
-                        sector_param="EutranCell",
-                        y2_avg="CSSR",
-                        # yaxis_range=yaxis_ranges[0],
-                        yaxis_range=None,
+                        yline="CSSR",
                         xrule=True,
                     )
 
@@ -1776,15 +1728,12 @@ class App:
                         )
                     )
 
-                    self.chart_generator.create_charts_datums(
+                    self.chart_generator.create_charts_for_daily(
                         df=combined_target_ltedaily_df,
-                        param="Session Abnormal Release",
-                        site="Combined Sites",
+                        cell_name="EutranCell",
                         x_param="DATE_ID",
                         y_param="SAR",
-                        sector_param="EutranCell",
-                        y2_avg="Service Drop Rate",
-                        yaxis_range=None,
+                        yline="Service Drop Rate",
                         xrule=True,
                     )
 
@@ -1798,16 +1747,12 @@ class App:
                         )
                     )
 
-                    self.chart_generator.create_charts_datums(
+                    self.chart_generator.create_charts_for_daily(
                         df=combined_target_ltedaily_df,
-                        param="CQI Non HOM",
-                        site="Combined Sites",
+                        cell_name="EutranCell",
                         x_param="DATE_ID",
                         y_param="avgcqinonhom",
-                        sector_param="EutranCell",
-                        y2_avg="CQI",
-                        # yaxis_range=yaxis_ranges[4],
-                        yaxis_range=None,
+                        yline="CQI",
                         xrule=True,
                     )
 
@@ -1821,15 +1766,12 @@ class App:
                         )
                     )
 
-                    self.chart_generator.create_charts_datums(
+                    self.chart_generator.create_charts_for_daily(
                         df=combined_target_ltedaily_df,
-                        param="Spectral Efficiency",
-                        site="Combined Sites",
+                        cell_name="EutranCell",
                         x_param="DATE_ID",
                         y_param="SE_DAILY",
-                        sector_param="EutranCell",
-                        y2_avg="SE",
-                        yaxis_range=None,
+                        yline="SE",
                         xrule=True,
                     )
 
@@ -1843,16 +1785,12 @@ class App:
                         )
                     )
 
-                    self.chart_generator.create_charts_datums(
+                    self.chart_generator.create_charts_for_daily(
                         df=combined_target_ltedaily_df,
-                        param="Intra HO SR",
-                        site="Combined Sites",
+                        cell_name="EutranCell",
                         x_param="DATE_ID",
                         y_param="Intra_HO_Exe_SR",
-                        sector_param="EutranCell",
-                        y2_avg="Intra Freq HOSR",
-                        # yaxis_range=yaxis_ranges[0],
-                        yaxis_range=None,
+                        yline="Intra Freq HOSR",
                         xrule=True,
                     )
 
@@ -1866,16 +1804,12 @@ class App:
                         )
                     )
 
-                    self.chart_generator.create_charts_datums(
+                    self.chart_generator.create_charts_for_daily(
                         df=combined_target_ltedaily_df,
-                        param="Inter HO SR",
-                        site="Combined Sites",
+                        cell_name="EutranCell",
                         x_param="DATE_ID",
                         y_param="Inter_HO_Exe_SR",
-                        sector_param="EutranCell",
-                        y2_avg="Inter Freq HOSR",
-                        # yaxis_range=yaxis_ranges[0],
-                        yaxis_range=None,
+                        yline="Inter Freq HOSR",
                         xrule=True,
                     )
 
@@ -1889,21 +1823,15 @@ class App:
                         )
                     )
 
-                    self.chart_generator.create_charts_datums(
+                    self.chart_generator.create_charts_for_daily_reverse(
                         df=combined_target_ltedaily_df,
-                        param="UL RSSI",
-                        site="Combined Sites",
+                        cell_name="EutranCell",
                         x_param="DATE_ID",
                         y_param="UL_INT_PUSCH_y",
-                        sector_param="EutranCell",
-                        y2_avg="UL_INT_PUSCH_x",
-                        yaxis_range=yaxis_ranges[5],
-                        # yaxis_range=None,
-                        yaxis_reverse=True,
+                        yline="UL_INT_PUSCH_x",
                         xrule=True,
                     )
 
-                    # TAG: - Throughput Mpbs
                     st.markdown(
                         *styling(
                             f"📶 Throughput (Mbps) Sectoral for Site {siteid}",
@@ -1913,18 +1841,14 @@ class App:
                         )
                     )
 
-                    self.chart_generator.create_charts(
+                    self.chart_generator.create_charts_for_daily(
                         df=combined_target_ltedaily_df,
-                        param="Throughput Mpbs",
-                        site="Combined Sites",
+                        cell_name="EutranCell",
                         x_param="DATE_ID",
                         y_param="CellDownlinkAverageThroughput",
-                        sector_param="EutranCell",
-                        yaxis_range=None,
                         xrule=True,
                     )
 
-                    # TAG: - Payload Sector
                     st.markdown(
                         *styling(
                             f"📶 Payload Distribution Sectoral for Site {siteid} (Gpbs)",
@@ -1934,14 +1858,11 @@ class App:
                         )
                     )
 
-                    self.chart_generator.create_charts_area(
+                    self.chart_generator.create_charts_for_stacked_area(
                         df=combined_target_ltedaily_df,
-                        param="Payload Sectoral",
-                        site="Combined Sites",
+                        cell_name="EutranCell",
                         x_param="DATE_ID",
                         y_param="Payload_Total(Gb)",
-                        sector_param="EutranCell",
-                        yaxis_range=None,
                         xrule=True,
                     )
 
@@ -1968,9 +1889,8 @@ class App:
                     "ltebusyhour_data", ltebusyhour_data
                 )
 
-                # TAG: - LTE Hourly Data
                 self.dataframe_manager.add_dataframe("ltehourly_data", ltehourly_data)
-
+                ltehourly_data_mulsec = add_mulsec_category(ltehourly_data)
                 vswr_data = self.query_manager.get_vswr_data(selected_sites, end_date)
                 self.dataframe_manager.add_dataframe("vswr_data", vswr_data)
 
@@ -2010,14 +1930,11 @@ class App:
                             }
                             """,
                     ):
-                        self.chart_generator.create_charts_neid(
+                        self.chart_generator.create_charts_for_stacked_area_neid(
                             df=payload_data,
-                            param="Payload Frequency",
-                            site="Sites",
+                            neid="NEID",
                             x_param="DATE_ID",
                             y_param="Payload_Total(Gb)",
-                            neid="NEID",
-                            yaxis_range=None,
                             xrule=True,
                         )
 
@@ -2033,14 +1950,11 @@ class App:
                             }
                             """,
                     ):
-                        self.chart_generator.create_charts_neid(
+                        self.chart_generator.create_charts_for_stacked_area_neid(
                             df=payload_data,
-                            param="Payload By Site",
-                            site="Sites",
+                            neid="SITEID",
                             x_param="DATE_ID",
                             y_param="Payload_Total(Gb)",
-                            neid="SITEID",
-                            yaxis_range=None,
                             xrule=True,
                         )
 
@@ -2052,16 +1966,12 @@ class App:
                         tag="h6",
                     )
                 )
-
-                self.chart_generator.create_charts(
+                self.chart_generator.create_charts_for_daily(
                     df=ltebusyhour_data,
-                    param="CQI Overlay",
-                    site="Combined Sites",
+                    cell_name="EUtranCellFDD",
                     x_param="DATE_ID",
                     y_param="CQI",
-                    sector_param="EUtranCellFDD",
-                    yaxis_range=None,
-                    xrule=False,
+                    xrule=True,
                 )
 
                 # MARK: CQI 1st tier
@@ -2083,48 +1993,24 @@ class App:
                     except Exception as e:
                         st.write(f"An error occurred: {e!s}")
 
-                # TODO: - PRB Charts
-                # FLAG: - Update PRB for sectoral
-                col1, col2 = st.columns([1, 1])
-                con1 = col1.container()
-                con2 = col2.container()
-                with con1:
+                cols = st.columns(1)
+                with cols[0]:
                     st.markdown(
                         *styling(
-                            f"📶 PRB Utilization Sectoral for Site {siteid}",
+                            f"📶 PRB Utilization VS Active User Multisector for Site {siteid}",
                             font_size=24,
                             text_align="left",
                             tag="h6",
                         )
                     )
 
-                    # st.table(ltehourly_data)
-                    self.chart_generator.create_charts_prbau(
-                        df=ltehourly_data,
-                        # param="PRB Utilization",
-                        # site="Combined Sites",
+                    # FLAG: transform to mulsec
+                    self.chart_generator.create_charts_for_mulsec(
+                        df=ltehourly_data_mulsec,
+                        cell_name="EUtranCellFDD",
                         x_param="datetime",
                         y_param="DL_Resource_Block_Utilizing_Rate",
-                        sector_param="EUtranCellFDD",
-                        yaxis_range=None,
-                    )
-                with con2:
-                    st.markdown(
-                        *styling(
-                            f"📶 Active User Sectoral for Site {siteid}",
-                            font_size=24,
-                            text_align="left",
-                            tag="h6",
-                        )
-                    )
-                    self.chart_generator.create_charts_prbau(
-                        df=ltehourly_data,
-                        # param="Active User",
-                        # site="Combined Sites",
-                        x_param="datetime",
-                        y_param="Active User",
-                        sector_param="EUtranCellFDD",
-                        yaxis_range=None,
+                        y_param2="Active User",
                     )
 
                 st.markdown(
@@ -2135,14 +2021,11 @@ class App:
                         tag="h6",
                     )
                 )
-                self.chart_generator.create_charts_hourly(
-                    df=ltehourly_data,
-                    param="PRB Utilization",
-                    site="Combined Sites",
+                self.chart_generator.create_charts_for_daily(
+                    df=ltehourly_data_mulsec,
+                    cell_name="EUtranCellFDD",
                     x_param="datetime",
                     y_param="DL_Resource_Block_Utilizing_Rate",
-                    sector_param="EUtranCellFDD",
-                    yaxis_range=None,
                 )
                 st.markdown(
                     *styling(
@@ -2152,21 +2035,14 @@ class App:
                         tag="h6",
                     )
                 )
-                self.chart_generator.create_charts_hourly(
-                    df=ltehourly_data,
-                    param="Active User",
-                    site="Combined Sites",
+                self.chart_generator.create_charts_for_daily(
+                    df=ltehourly_data_mulsec,
+                    cell_name="EUtranCellFDD",
                     x_param="datetime",
                     y_param="Active User",
-                    sector_param="EUtranCellFDD",
-                    yaxis_range=None,
                 )
 
-                # Fetch VSWR data
-
-                # TAG: - VSWR
                 col1, col2 = st.columns([3, 2])
-
                 with col1:
                     st.markdown(
                         *styling(
@@ -2248,7 +2124,43 @@ class App:
                                 st.error(f"Please upload the image: {ret}")
                         else:
                             st.error(f"Path does not exist: {folder}")
-
+                with con2:
+                    st.markdown(
+                        *styling(
+                            f"📶 VSWR for Site {siteid}",
+                            font_size=24,
+                            text_align="left",
+                            tag="h4",
+                        )
+                    )
+                    with stylable_container(
+                        key="container_with_border",
+                        css_styles="""
+                        img {
+                            display: block;
+                            margin-left: auto;
+                            margin-right: auto;
+                            width: 100%;
+                            max-width: 80%;
+                            position: relative;
+                            top: 0px;
+                        }
+                        .custom-container {
+                            background-color: #F5F5F5;
+                            border: 2px solid rgba(49, 51, 63, 0.2);
+                            border-radius: 0.5rem;
+                            padding: calc(1em - 1px);
+                        }
+                        """,
+                    ):
+                        if os.path.exists(folder):
+                            vswr = os.path.join(folder, "vswr.jpg")
+                            if os.path.exists(vswr):
+                                st.image(vswr, caption=None, use_column_width=True)
+                            else:
+                                st.error(f"Please upload the image: {vswr}")
+                        else:
+                            st.error(f"Path does not exist: {folder}")
                 # MARK: - GeoApp MDT Data
                 mcom_data1 = self.query_manager.get_mcom_data(siteid)
                 st.session_state.mcom_data1 = mcom_data1
@@ -2265,7 +2177,7 @@ class App:
                     "Ant_Size",
                     "cellId",
                     "eNBId",
-                    "MC_class",
+                    # "MC_class",
                     "KABUPATEN",
                     "LTE",
                 ]
@@ -2275,7 +2187,6 @@ class App:
                     )
 
                 self.dataframe_manager.add_dataframe(f"mcom_data_{siteid}", mcom_data)
-                # TODO: mcom_data
                 # st.write(mcom_data)
 
                 if isinstance(selected_neids, list):
@@ -2302,7 +2213,6 @@ class App:
                     ltemdtdata[["enodebid", "ci"]].apply(tuple, axis=1).isin(filter_set)
                 ]
 
-                # TODO: mcom and ta state
                 # mcom_ta = self.query_manager.get_mcom_tastate(selected_neids)
                 # self.dataframe_manager.add_dataframe("mcom_ta", mcom_data1)
                 ltetastate_data = self.query_manager.get_ltetastate_data(selected_sites)
@@ -2352,7 +2262,6 @@ class App:
                     self.geodata = GeoApp(mcom_data, ltemdtdata)
                     self.geodata.run_geo_app()
                 with con2:
-                    st.markdown(*styling(" "))
                     st.markdown(
                         *styling(
                             f"📶 TA State for Site {siteid}",
@@ -2515,6 +2424,11 @@ class App:
                         else:
                             st.error(f"Path does not exist: {folder}")
 
+                (
+                    col1,
+                    _,
+                    _,
+                ) = st.columns([1, 1, 1])
                 with col1:
                     st.markdown(
                         *styling(

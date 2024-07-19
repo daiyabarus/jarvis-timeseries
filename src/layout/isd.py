@@ -8,7 +8,7 @@ import streamlit as st
 class InterSiteDistance:
     def __init__(self, data):
         self.data = data
-        self.beamwidth = 90
+        self.beamwidth = 60
         self.earth_radius = 6371  # in kilometers
 
     def calculate_distance(self, lat1, lon1, lat2, lon2):

@@ -1,19 +1,17 @@
 from typing import ClassVar
 
 
-# 190041
-# 091F2E
 class ColorPalette:
     color_codes: ClassVar[list[str]] = [
-        "#00A86B",
+        "#00B0F0",
         "#B60008",
-        "#800000",
-        "#5E2EA7",
-        "#190041",
+        "#92D050",
+        "#FFC000",
         "#D26939",
         "#9932CC",
         "#00FF00",
-        "#800080",
+        "#002D80",
+        "#5E2EA7",
         "#FF1493",
         "#4682B4",
         "#FF7795",
@@ -71,7 +69,7 @@ class ColorPalette:
 
         # Update the last colors list
         cls.last_colors.append(selected_color)
-        if len(cls.last_colors) > 5:
+        if len(cls.last_colors) > 1:
             cls.last_colors.pop(0)
 
         return selected_color

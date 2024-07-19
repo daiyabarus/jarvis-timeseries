@@ -11,7 +11,7 @@ class ColorPalette:
         "#D26939",
         "#9932CC",
         "#00FF00",
-        "#800080",
+        "#002D80",
         "#FF1493",
         "#4682B4",
         "#FF7795",
@@ -66,7 +66,7 @@ class ColorPalette:
             selected_color = extended_colors[index % len(cls.color_codes)]
 
         cls.last_colors.append(selected_color)
-        if len(cls.last_colors) > 5:
+        if len(cls.last_colors) > 1:
             cls.last_colors.pop(0)
 
         return selected_color
