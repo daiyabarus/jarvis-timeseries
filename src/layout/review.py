@@ -472,8 +472,8 @@ class ChartGenerator:
         df["date"] = pd.to_datetime(df["date"])
         unique_cellnames = tier_data["cellname"].unique()
         unique_adjcellnames = tier_data["adjcellname"].unique()
-        all_unique_names = np.unique(
-            np.concatenate((unique_cellnames, unique_adjcellnames))
+        all_unique_names = sorted(
+            np.unique(np.concatenate((unique_cellnames, unique_adjcellnames)))
         )
         colors = self.get_colors(len(all_unique_names))
         color_mapping = {name: color for name, color in zip(all_unique_names, colors)}
@@ -681,22 +681,29 @@ class ChartGenerator:
         df[y_param] = df[y_param].astype(float)
         df = df[df[y_param] != 0]
         df["sector"] = df[cell_name].apply(self.determine_sector)
+
         color_mapping = {
             cell: color
             for cell, color in zip(
-                df[cell_name].unique(),
+                sorted(df[cell_name].unique()),  # Sort the unique values of cell_name
                 self.get_colors(len(df[cell_name].unique())),
             )
         }
 
         sector_count = df["sector"].nunique()
-        cols = min(sector_count, 3)
+        # cols = min(sector_count, 3)
+        cols = max(min(sector_count, 3), 1)
         columns = st.columns(cols)
 
         for idx, sector in enumerate(sorted(df["sector"].unique())):
             sector_data = df[df["sector"] == sector]
             y_min = sector_data[sector_data[y_param] > 0][y_param].min()
-            y_max = sector_data[y_param].max()
+            y_max_value = sector_data[y_param].max()
+            y_max = (
+                100
+                if 95 < y_max_value <= 100
+                else y_max_value if y_max_value > 100 else y_max_value
+            )
 
             with columns[idx % cols]:
                 with stylable_container(
@@ -726,7 +733,7 @@ class ChartGenerator:
                                     y=cell_data[y_param],
                                     mode="lines",
                                     name=cell,
-                                    line=dict(color=color, width=2),
+                                    line=dict(color=color, width=3),
                                     hovertemplate=(
                                         f"<b>{cell}</b><br>"
                                         f"<b>{y_param}:</b> %{{y}}<br>"
@@ -766,7 +773,7 @@ class ChartGenerator:
                             title_text=title,
                             title_x=0.4,
                             template="plotly_white",
-                            hoverlabel=dict(font_size=16, font_family="Vodafone"),
+                            hoverlabel=dict(font_size=14, font_family="Vodafone"),
                             hovermode="x unified",
                             legend=dict(
                                 orientation="h",
@@ -784,7 +791,19 @@ class ChartGenerator:
                             width=600,
                             height=350,
                             showlegend=True,
-                            yaxis=dict(range=yaxis_range),
+                            yaxis=dict(
+                                range=yaxis_range,
+                                tickfont=dict(
+                                    size=14,  # Updated size for y-axis tick labels
+                                    color="#000000",
+                                ),
+                            ),
+                            xaxis=dict(
+                                tickfont=dict(
+                                    size=14,  # Updated size for x-axis tick labels
+                                    color="#000000",
+                                ),
+                            ),
                         )
 
                         st.plotly_chart(fig, use_container_width=True)
@@ -802,7 +821,7 @@ class ChartGenerator:
         color_mapping = {
             cell: color
             for cell, color in zip(
-                df[cell_name].unique(),
+                sorted(df[cell_name].unique()),
                 self.get_colors(len(df[cell_name].unique())),
             )
         }
@@ -845,7 +864,7 @@ class ChartGenerator:
                                     y=cell_data[y_param],
                                     mode="lines",
                                     name=cell,
-                                    line=dict(color=color, width=2),
+                                    line=dict(color=color, width=3),
                                     hovertemplate=(
                                         f"<b>{cell}</b><br>"
                                         f"<b>{y_param}:</b> %{{y}}<br>"
@@ -910,7 +929,17 @@ class ChartGenerator:
                             width=600,
                             height=350,
                             showlegend=True,
-                            yaxis=dict(autorange="reversed", range=yaxis_range),
+                            xaxis=dict(
+                                tickfont=dict(
+                                    size=14,
+                                    color="#000000",
+                                ),
+                            ),
+                            yaxis=dict(
+                                autorange="reversed",
+                                range=yaxis_range,
+                                tickfont=dict(size=14, color="#000000"),
+                            ),
                         )
 
                         st.plotly_chart(fig, use_container_width=True)
@@ -1002,12 +1031,23 @@ class ChartGenerator:
                                 font=dict(size=16),
                                 title=None,
                             ),
+                            yaxis=dict(
+                                tickfont=dict(
+                                    size=14,  # Updated size for y-axis tick labels
+                                    color="#000000",
+                                ),
+                            ),
+                            xaxis=dict(
+                                tickfont=dict(
+                                    size=14,  # Updated size for x-axis tick labels
+                                    color="#000000",
+                                ),
+                            ),
                             paper_bgcolor="#F5F5F5",
                             plot_bgcolor="#F5F5F5",
                             width=600,
                             height=350,
                             showlegend=True,
-                            yaxis=dict(range=y_range) if y_range else None,
                         )
 
                         st.plotly_chart(fig, use_container_width=True)
@@ -1062,6 +1102,18 @@ class ChartGenerator:
                     font=dict(size=16),
                     title=None,
                 ),
+                yaxis=dict(
+                    tickfont=dict(
+                        size=14,  # Updated size for y-axis tick labels
+                        color="#000000",
+                    ),
+                ),
+                xaxis=dict(
+                    tickfont=dict(
+                        size=14,  # Updated size for x-axis tick labels
+                        color="#000000",
+                    ),
+                ),
                 paper_bgcolor="#F5F5F5",
                 plot_bgcolor="#F5F5F5",
                 width=600,
@@ -1104,7 +1156,9 @@ class ChartGenerator:
             color_mapping = {
                 cell: color
                 for cell, color in zip(
-                    df[cell_name].unique(),
+                    sorted(
+                        df[cell_name].unique()
+                    ),  # Sort the unique values of cell_name
                     self.get_colors(len(df[cell_name].unique())),
                 )
             }
@@ -2177,7 +2231,6 @@ class App:
                     "Ant_Size",
                     "cellId",
                     "eNBId",
-                    # "MC_class",
                     "KABUPATEN",
                     "LTE",
                 ]
@@ -2213,8 +2266,6 @@ class App:
                     ltemdtdata[["enodebid", "ci"]].apply(tuple, axis=1).isin(filter_set)
                 ]
 
-                # mcom_ta = self.query_manager.get_mcom_tastate(selected_neids)
-                # self.dataframe_manager.add_dataframe("mcom_ta", mcom_data1)
                 ltetastate_data = self.query_manager.get_ltetastate_data(selected_sites)
                 self.dataframe_manager.add_dataframe("ltetastate_data", ltetastate_data)
                 mcom_data["cellId"] = mcom_data["cellId"].astype(float)
