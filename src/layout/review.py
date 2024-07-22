@@ -691,7 +691,6 @@ class ChartGenerator:
         }
 
         sector_count = df["sector"].nunique()
-        # cols = min(sector_count, 3)
         cols = max(min(sector_count, 3), 1)
         columns = st.columns(cols)
 
@@ -733,7 +732,7 @@ class ChartGenerator:
                                     y=cell_data[y_param],
                                     mode="lines",
                                     name=cell,
-                                    line=dict(color=color, width=3),
+                                    line=dict(color=color, width=2),
                                     hovertemplate=(
                                         f"<b>{cell}</b><br>"
                                         f"<b>{y_param}:</b> %{{y}}<br>"
@@ -750,7 +749,6 @@ class ChartGenerator:
                                 line_color="#F70000",
                                 line_width=2,
                             )
-                            # Adjust y_max if yline_value is greater
                             if yline_value > y_max:
                                 y_max = yline_value
                             elif yline_value < y_min:
@@ -764,7 +762,6 @@ class ChartGenerator:
                                 line_color="#808080",
                             )
 
-                        # Adjust y_min to be slightly above zero if it is zero or negative
                         adjusted_y_min = y_min if y_min > 0 else 0.01
                         yaxis_range = [adjusted_y_min, y_max]
 
@@ -785,6 +782,7 @@ class ChartGenerator:
                                 itemdoubleclick="toggle",
                                 itemsizing="constant",
                                 font=dict(size=14),
+                                traceorder="normal",
                             ),
                             paper_bgcolor="#F5F5F5",
                             plot_bgcolor="#F5F5F5",
@@ -794,7 +792,7 @@ class ChartGenerator:
                             yaxis=dict(
                                 range=yaxis_range,
                                 tickfont=dict(
-                                    size=14,  # Updated size for y-axis tick labels
+                                    size=14,
                                     color="#000000",
                                 ),
                             ),
@@ -814,7 +812,6 @@ class ChartGenerator:
         df = df.sort_values(by=x_param)
         df["sector"] = df[cell_name].apply(self.determine_sector)
 
-        # Convert y_param to float and exclude zero values
         df[y_param] = df[y_param].astype(float)
         df = df[df[y_param] != 0]
 
@@ -864,7 +861,7 @@ class ChartGenerator:
                                     y=cell_data[y_param],
                                     mode="lines",
                                     name=cell,
-                                    line=dict(color=color, width=3),
+                                    line=dict(color=color, width=2),
                                     hovertemplate=(
                                         f"<b>{cell}</b><br>"
                                         f"<b>{y_param}:</b> %{{y}}<br>"
@@ -1033,13 +1030,13 @@ class ChartGenerator:
                             ),
                             yaxis=dict(
                                 tickfont=dict(
-                                    size=14,  # Updated size for y-axis tick labels
+                                    size=14,
                                     color="#000000",
                                 ),
                             ),
                             xaxis=dict(
                                 tickfont=dict(
-                                    size=14,  # Updated size for x-axis tick labels
+                                    size=14,
                                     color="#000000",
                                 ),
                             ),
@@ -1299,6 +1296,55 @@ class App:
 
         # MARK: apply mulsec logic to dataframe
         st.cache_data(ttl=1200)
+
+        eutran_mapping = {
+            "L23_F1_S1": ["ME1", "ME01"],
+            "L23_F2_S1": ["MF1", "MF01"],
+            "L23_F1_S2": ["ME2", "ME02"],
+            "L23_F2_S2": ["MF2", "MF02"],
+            "L23_F1_S3": ["ME3", "ME03"],
+            "L23_F2_S3": ["MF1", "MF03"],
+            "L23_MIMO_50_F3_S1": ["MV01"],
+            "L23_MIMO_50_F3_S2": ["MV02"],
+            "L23_MIMO_50_F3_S3": ["MV03"],
+            "L23_MIMO_F1_S1": ["VE01"],
+            "L23_MIMO_F1_S2": ["VE02"],
+            "L23_MIMO_F1_S3": ["VE03"],
+            "L23_MIMO_F2_S1": ["VF01"],
+            "L23_MIMO_F2_S2": ["VF02"],
+            "L23_MIMO_F3_S3": ["VF03"],
+            "L9_S1": ["MT1", "MT01"],
+            "L9_S2": ["MT2", "MT02"],
+            "L9_S3": ["MT3", "MT03"],
+            "L9_S4": ["MT4", "MT04"],
+            "L9_S5": ["MT5", "MT05"],
+            "L9_S6": ["MT6", "MT06"],
+            "L18_S1": ["ML1", "ML01"],
+            "L18_S2": ["ML2", "ML02"],
+            "L18_S3": ["ML3", "ML03"],
+            "L18_S4": ["ML4", "ML04"],
+            "L18_S5": ["ML5", "ML05"],
+            "L18_S6": ["ML6", "ML06"],
+            "L21_S1": ["MR1", "MR01"],
+            "L21_S2": ["MR2", "MR02"],
+            "L21_S3": ["MR3", "MR03"],
+            "L21_S4": ["MR4", "MR04"],
+            "L21_S5": ["MR5", "MR05"],
+            "L21_S6": ["MR6", "MR06"],
+        }
+
+        reverse_mapping = {v: k for k, vals in eutran_mapping.items() for v in vals}
+
+        def find_mapping(value):
+            for suffix in reverse_mapping:
+                if value.endswith(suffix):
+                    return reverse_mapping[suffix]
+            return "Unknown"
+
+        def split_sector(df, col, new_col="eutrancell_new"):
+            # Apply the find_mapping function to each row
+            df[new_col] = df[col].apply(find_mapping)
+            return df
 
         def add_mulsec_category(df):
             def get_mulsec_category(cell, cells):
@@ -1695,9 +1741,14 @@ class App:
                         on="EutranCell",
                         how="right",
                     )
-                    self.dataframe_manager.add_dataframe(
-                        "combined_target_ltedaily_data", combined_target_ltedaily_df
+                    # st.table(combined_target_ltedaily_df)
+                    final_data_ltedaily = split_sector(
+                        combined_target_ltedaily_df, "EutranCell"
                     )
+                    # st.write(final_data_ltedaily)
+                    # self.dataframe_manager.add_dataframe(
+                    #     "combined_target_ltedaily_data", combined_target_ltedaily_df
+                    # )
 
                     # FLAG: Start Charts
                     st.markdown(
@@ -1709,8 +1760,8 @@ class App:
                         )
                     )
                     self.chart_generator.create_charts_for_daily(
-                        df=combined_target_ltedaily_df,
-                        cell_name="EutranCell",
+                        df=final_data_ltedaily,
+                        cell_name="eutrancell_new",
                         x_param="DATE_ID",
                         y_param="Availability",
                         xrule=True,
@@ -1726,8 +1777,8 @@ class App:
 
                     # FLAG: - create_charts_for_daily
                     self.chart_generator.create_charts_for_daily(
-                        df=combined_target_ltedaily_df,
-                        cell_name="EutranCell",
+                        df=final_data_ltedaily,
+                        cell_name="eutrancell_new",
                         x_param="DATE_ID",
                         y_param="RRC_SR",
                         yline="CSSR",
@@ -1745,8 +1796,8 @@ class App:
                     )
 
                     self.chart_generator.create_charts_for_daily(
-                        df=combined_target_ltedaily_df,
-                        cell_name="EutranCell",
+                        df=final_data_ltedaily,
+                        cell_name="eutrancell_new",
                         x_param="DATE_ID",
                         y_param="ERAB_SR",
                         yline="CSSR",
@@ -1764,8 +1815,8 @@ class App:
                     )
 
                     self.chart_generator.create_charts_for_daily(
-                        df=combined_target_ltedaily_df,
-                        cell_name="EutranCell",
+                        df=final_data_ltedaily,
+                        cell_name="eutrancell_new",
                         x_param="DATE_ID",
                         y_param="SSSR",
                         yline="CSSR",
@@ -1783,8 +1834,8 @@ class App:
                     )
 
                     self.chart_generator.create_charts_for_daily(
-                        df=combined_target_ltedaily_df,
-                        cell_name="EutranCell",
+                        df=final_data_ltedaily,
+                        cell_name="eutrancell_new",
                         x_param="DATE_ID",
                         y_param="SAR",
                         yline="Service Drop Rate",
@@ -1802,8 +1853,8 @@ class App:
                     )
 
                     self.chart_generator.create_charts_for_daily(
-                        df=combined_target_ltedaily_df,
-                        cell_name="EutranCell",
+                        df=final_data_ltedaily,
+                        cell_name="eutrancell_new",
                         x_param="DATE_ID",
                         y_param="avgcqinonhom",
                         yline="CQI",
@@ -1821,8 +1872,8 @@ class App:
                     )
 
                     self.chart_generator.create_charts_for_daily(
-                        df=combined_target_ltedaily_df,
-                        cell_name="EutranCell",
+                        df=final_data_ltedaily,
+                        cell_name="eutrancell_new",
                         x_param="DATE_ID",
                         y_param="SE_DAILY",
                         yline="SE",
@@ -1840,8 +1891,8 @@ class App:
                     )
 
                     self.chart_generator.create_charts_for_daily(
-                        df=combined_target_ltedaily_df,
-                        cell_name="EutranCell",
+                        df=final_data_ltedaily,
+                        cell_name="eutrancell_new",
                         x_param="DATE_ID",
                         y_param="Intra_HO_Exe_SR",
                         yline="Intra Freq HOSR",
@@ -1859,8 +1910,8 @@ class App:
                     )
 
                     self.chart_generator.create_charts_for_daily(
-                        df=combined_target_ltedaily_df,
-                        cell_name="EutranCell",
+                        df=final_data_ltedaily,
+                        cell_name="eutrancell_new",
                         x_param="DATE_ID",
                         y_param="Inter_HO_Exe_SR",
                         yline="Inter Freq HOSR",
@@ -1878,8 +1929,8 @@ class App:
                     )
 
                     self.chart_generator.create_charts_for_daily_reverse(
-                        df=combined_target_ltedaily_df,
-                        cell_name="EutranCell",
+                        df=final_data_ltedaily,
+                        cell_name="eutrancell_new",
                         x_param="DATE_ID",
                         y_param="UL_INT_PUSCH_y",
                         yline="UL_INT_PUSCH_x",
@@ -1896,8 +1947,8 @@ class App:
                     )
 
                     self.chart_generator.create_charts_for_daily(
-                        df=combined_target_ltedaily_df,
-                        cell_name="EutranCell",
+                        df=final_data_ltedaily,
+                        cell_name="eutrancell_new",
                         x_param="DATE_ID",
                         y_param="CellDownlinkAverageThroughput",
                         xrule=True,
@@ -1913,8 +1964,8 @@ class App:
                     )
 
                     self.chart_generator.create_charts_for_stacked_area(
-                        df=combined_target_ltedaily_df,
-                        cell_name="EutranCell",
+                        df=final_data_ltedaily,
+                        cell_name="eutrancell_new",
                         x_param="DATE_ID",
                         y_param="Payload_Total(Gb)",
                         xrule=True,
@@ -1924,6 +1975,7 @@ class App:
                     selected_sites, start_date, end_date
                 )
                 self.dataframe_manager.add_dataframe("payload_data", payload_data)
+                st.write(payload_data)
 
                 ltehourly_data = self.query_manager.get_ltehourly_data(
                     selected_sites, end_date
@@ -1939,12 +1991,17 @@ class App:
                 ltebusyhour_data = self.query_manager.get_busyhour(
                     selected_sites, end_date
                 )
-                self.dataframe_manager.add_dataframe(
-                    "ltebusyhour_data", ltebusyhour_data
-                )
+                # self.dataframe_manager.add_dataframe(
+                #     "ltebusyhour_data", ltebusyhour_data
+                # )
+                ltebusyhour_data_final = split_sector(ltebusyhour_data, "EUtranCellFDD")
 
                 self.dataframe_manager.add_dataframe("ltehourly_data", ltehourly_data)
                 ltehourly_data_mulsec = add_mulsec_category(ltehourly_data)
+                ltehourly_data_final = split_sector(
+                    ltehourly_data_mulsec, "EUtranCellFDD"
+                )
+                # st.write(ltehourly_data_final)
                 vswr_data = self.query_manager.get_vswr_data(selected_sites, end_date)
                 self.dataframe_manager.add_dataframe("vswr_data", vswr_data)
 
@@ -2020,9 +2077,10 @@ class App:
                         tag="h6",
                     )
                 )
+                # st.write(ltebusyhour_data_final)
                 self.chart_generator.create_charts_for_daily(
-                    df=ltebusyhour_data,
-                    cell_name="EUtranCellFDD",
+                    df=ltebusyhour_data_final,
+                    cell_name="eutrancell_new",
                     x_param="DATE_ID",
                     y_param="CQI",
                     xrule=True,
@@ -2060,8 +2118,8 @@ class App:
 
                     # FLAG: transform to mulsec
                     self.chart_generator.create_charts_for_mulsec(
-                        df=ltehourly_data_mulsec,
-                        cell_name="EUtranCellFDD",
+                        df=ltehourly_data_final,
+                        cell_name="eutrancell_new",
                         x_param="datetime",
                         y_param="DL_Resource_Block_Utilizing_Rate",
                         y_param2="Active User",
@@ -2076,8 +2134,8 @@ class App:
                     )
                 )
                 self.chart_generator.create_charts_for_daily(
-                    df=ltehourly_data_mulsec,
-                    cell_name="EUtranCellFDD",
+                    df=ltehourly_data_final,
+                    cell_name="eutrancell_new",
                     x_param="datetime",
                     y_param="DL_Resource_Block_Utilizing_Rate",
                 )
@@ -2090,8 +2148,8 @@ class App:
                     )
                 )
                 self.chart_generator.create_charts_for_daily(
-                    df=ltehourly_data_mulsec,
-                    cell_name="EUtranCellFDD",
+                    df=ltehourly_data_final,
+                    cell_name="eutrancell_new",
                     x_param="datetime",
                     y_param="Active User",
                 )

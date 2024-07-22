@@ -81,7 +81,6 @@ class GsmDaily:
                 x=sector_data["DATE_ID"],
                 y=sector_data["Availability"],
                 mode="lines+markers",
-                # name="Availability",
                 line=dict(color="#E60000"),
                 showlegend=False,
             ),
@@ -93,7 +92,6 @@ class GsmDaily:
             title_x=0.5,
             template="plotly_white",
             yaxis=dict(range=yaxis_range),
-            # xaxis=dict(tickformat="%m/%d/%y", title="Date", tickangle=-45),
             xaxis=dict(tickformat="%m/%d/%y", tickangle=-45),
             autosize=True,
             showlegend=False,
@@ -101,7 +99,6 @@ class GsmDaily:
             width=600,
             height=350,
         )
-        # fig.update_yaxes(title_text="Availability", secondary_y=False)
         fig.update_yaxes(secondary_y=False)
 
         st.plotly_chart(fig, use_container_width=True)
