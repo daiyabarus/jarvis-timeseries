@@ -1,3 +1,4 @@
+import math
 import os
 
 import numpy as np
@@ -16,6 +17,8 @@ from sqlalchemy.orm import sessionmaker
 from streamlit_extras.mandatory_date_range import date_range_picker
 from streamlit_extras.stylable_container import stylable_container
 from styles import styling
+
+pd.options.mode.copy_on_write = True
 
 
 class Config:
@@ -122,16 +125,16 @@ class QueryManager:
         )
         return self.fetch_data(query, {"siteid": siteid})
 
-    def get_mcom_neid(
-        self,
-    ):
+    def get_mcom_neid(self, neid):
         query = text(
             """
-            SELECT "NE_ID", "Cell_Name", "Longitude", "Latitude", "Dir"
-            FROM mcom
+        SELECT "Site_ID", "NODE_ID", "NE_ID", "Cell_Name", "Longitude", "Latitude", "Dir", "Ant_BW",
+               "Ant_Size", "cellId", "eNBId", "KABUPATEN", "LTE"
+        FROM mcom
+        WHERE "NE_ID" LIKE :neid
         """
         )
-        return self.fetch_data(query)
+        return self.fetch_data(query, {"neid": neid})
 
     def get_ltedaily_data(self, siteid, neids, start_date, end_date):
         query = text(
@@ -585,8 +588,94 @@ class ChartGenerator:
             with container:
                 st.plotly_chart(fig, use_container_width=True)
 
-    def create_charts_tastate(self, df):
-        # Select the specific headers for plotting
+    # def create_charts_tastate(self, df):
+    #     plot_columns = [
+    #         "perc_300",
+    #         "perc_500",
+    #         "perc_700",
+    #         "perc_1000",
+    #         "perc_1500",
+    #         "perc_2000",
+    #         "perc_3000",
+    #         "perc_5000",
+    #         "perc_10000",
+    #         "perc_15000",
+    #         "perc_30000",
+    #     ]
+
+    #     if "ci" in df.columns:
+    #         df = df[["ci", "Cell_Name"] + plot_columns]
+    #         color_by = "ci"
+    #     else:
+    #         df = df[["Cell_Name"] + plot_columns]
+    #         color_by = "Cell_Name"
+
+    #     x_values = plot_columns
+    #     unique_values = df[color_by].unique()
+    #     colors = self.get_colors(len(unique_values))
+    #     color_mapping = {value: color for value, color in zip(unique_values, colors)}
+
+    #     fig = go.Figure()
+
+    #     for value in unique_values:
+    #         filtered_df = df[df[color_by] == value]
+    #         cell_name = filtered_df["Cell_Name"].iloc[0]
+    #         fig.add_trace(
+    #             go.Bar(
+    #                 x=x_values,
+    #                 y=filtered_df.loc[:, x_values].values[0],
+    #                 name=cell_name,
+    #                 marker_color=color_mapping[value],
+    #                 hovertemplate=(
+    #                     f"<b>®️ {cell_name}</b><br>"
+    #                     f"<b></b> %{{x}} - %{{y}}<br>"
+    #                     "<extra></extra>"
+    #                 ),
+    #                 hoverlabel=dict(font_size=16, font_family="Vodafone"),
+    #             )
+    #         )
+
+    #     fig.update_layout(
+    #         barmode="group",
+    #         xaxis_title=None,
+    #         yaxis_title=None,
+    #         plot_bgcolor="#F5F5F5",
+    #         paper_bgcolor="#F5F5F5",
+    #         height=500,
+    #         font=dict(family="Vodafone", size=25, color="#717577"),
+    #         legend=dict(
+    #             orientation="h",
+    #             yanchor="top",
+    #             y=-0.1,
+    #             xanchor="center",
+    #             x=0.5,
+    #             bgcolor="#F5F5F5",
+    #             bordercolor="#F5F5F5",
+    #             itemclick="toggleothers",
+    #             itemdoubleclick="toggle",
+    #             itemsizing="constant",
+    #             font=dict(size=14),
+    #         ),
+    #         margin=dict(l=20, r=20, t=40, b=20),
+    #     )
+
+    #     with stylable_container(
+    #         key="container_with_border",
+    #         css_styles="""
+    #             {
+    #                 background-color: #F5F5F5;
+    #                 border: 2px solid rgba(49, 51, 63, 0.2);
+    #                 border-radius: 0.5rem;
+    #                 padding: calc(1em - 1px)
+    #             }
+    #             """,
+    #     ):
+    #         container = st.container()
+    #         with container:
+    #             st.plotly_chart(fig, use_container_width=True)
+
+    # MARK: tastate bar
+    def create_charts_tastate(self, df, sector):
         plot_columns = [
             "perc_300",
             "perc_500",
@@ -602,51 +691,83 @@ class ChartGenerator:
         ]
 
         if "ci" in df.columns:
-            df = df[["ci", "Cell_Name"] + plot_columns]
+            df = df[["ci", sector] + plot_columns]
             color_by = "ci"
         else:
-            df = df[["Cell_Name"] + plot_columns]
-            color_by = "Cell_Name"
+            df = df[[sector] + plot_columns]
+            color_by = sector
 
         x_values = plot_columns
         unique_values = df[color_by].unique()
         colors = self.get_colors(len(unique_values))
         color_mapping = {value: color for value, color in zip(unique_values, colors)}
 
-        fig = go.Figure()
+        # Calculate grid dimensions
+        total_sectors = len(df[sector].unique())
+        max_cols = 6
+        num_cols = min(max_cols, total_sectors)
+        num_rows = math.ceil(total_sectors / num_cols)
 
-        for value in unique_values:
-            filtered_df = df[df[color_by] == value]
-            cell_name = filtered_df["Cell_Name"].iloc[
-                0
-            ]  # Get the corresponding Cell_Name
-            fig.add_trace(
-                go.Bar(
-                    x=x_values,
-                    y=filtered_df.loc[:, x_values].values[0],
-                    name=cell_name,
-                    marker_color=color_mapping[value],
-                    hovertemplate=(
-                        f"<b>®️ {cell_name}</b><br>"
-                        f"<b></b> %{{x}} - %{{y}}<br>"
-                        "<extra></extra>"
+        # Create subplots
+        fig = make_subplots(
+            rows=num_rows,
+            cols=num_cols,
+            subplot_titles=df[sector].unique(),
+            vertical_spacing=0.15,
+            horizontal_spacing=0.05,
+        )
+
+        # Find global y-axis range
+        y_min = df[plot_columns].min().min()
+        y_max = df[plot_columns].max().max()
+        y_range = [y_min - (y_max - y_min) * 0.1, y_max + (y_max - y_min) * 0.1]
+
+        for i, sector_value in enumerate(df[sector].unique(), start=1):
+            row = (i - 1) // num_cols + 1
+            col = (i - 1) % num_cols + 1
+
+            sector_df = df[df[sector] == sector_value]
+
+            for value in sector_df[color_by].unique():
+                filtered_df = sector_df[sector_df[color_by] == value]
+                sector_name = filtered_df[sector].iloc[0]
+                fig.add_trace(
+                    go.Bar(
+                        x=x_values,
+                        y=filtered_df.loc[:, x_values].values[0],
+                        name=sector_name,
+                        marker_color=color_mapping[value],
+                        hovertemplate=(
+                            f"<b>®️ {sector_name}</b><br>"
+                            f"<b></b> %{{x}} - %{{y}}<br>"
+                            "<extra></extra>"
+                        ),
+                        hoverlabel=dict(font_size=16, font_family="Vodafone"),
                     ),
-                    hoverlabel=dict(font_size=16, font_family="Vodafone"),
+                    row=row,
+                    col=col,
                 )
+
+            # Update axes for each subplot
+            fig.update_xaxes(
+                title_text="", tickangle=90, tickfont=dict(size=12), row=row, col=col
+            )
+            fig.update_yaxes(
+                title_text="", tickfont=dict(size=12), range=y_range, row=row, col=col
             )
 
+        # Update layout
         fig.update_layout(
             barmode="group",
-            xaxis_title="",
-            yaxis_title="TOTAL",
             plot_bgcolor="#F5F5F5",
             paper_bgcolor="#F5F5F5",
-            height=500,
-            font=dict(family="Vodafone", size=25, color="#717577"),
+            height=300 * num_rows,
+            width=400 * num_cols,
+            font=dict(family="Vodafone", size=12, color="#717577"),
             legend=dict(
                 orientation="h",
-                yanchor="top",
-                y=-0.1,
+                yanchor="bottom",
+                y=-0.2,
                 xanchor="center",
                 x=0.5,
                 bgcolor="#F5F5F5",
@@ -657,7 +778,12 @@ class ChartGenerator:
                 font=dict(size=14),
             ),
             margin=dict(l=20, r=20, t=40, b=20),
+            showlegend=True,  # Hide the legend as it might be too crowded
         )
+
+        # Update subplot titles
+        for i in fig["layout"]["annotations"]:
+            i["font"] = dict(size=14)
 
         with stylable_container(
             key="container_with_border",
@@ -685,7 +811,7 @@ class ChartGenerator:
         color_mapping = {
             cell: color
             for cell, color in zip(
-                sorted(df[cell_name].unique()),  # Sort the unique values of cell_name
+                sorted(df[cell_name].unique()),
                 self.get_colors(len(df[cell_name].unique())),
             )
         }
@@ -718,8 +844,6 @@ class ChartGenerator:
                 ):
                     container = st.container()
                     with container:
-                        title = self.get_headers(sector_data[cell_name].unique())
-
                         fig = go.Figure()
 
                         for cell in sector_data[cell_name].unique():
@@ -767,11 +891,11 @@ class ChartGenerator:
 
                         fig.update_layout(
                             margin=dict(t=20, l=20, r=20, b=20),
-                            title_text=title,
+                            title_text=f"SECTOR {sector}",
                             title_x=0.4,
                             template="plotly_white",
                             hoverlabel=dict(font_size=14, font_family="Vodafone"),
-                            hovermode="x unified",
+                            # hovermode="x unified",
                             legend=dict(
                                 orientation="h",
                                 yanchor="top",
@@ -847,8 +971,6 @@ class ChartGenerator:
                 ):
                     container = st.container()
                     with container:
-                        title = self.get_headers(sector_data[cell_name].unique())
-
                         fig = go.Figure()
 
                         for cell in sector_data[cell_name].unique():
@@ -905,7 +1027,7 @@ class ChartGenerator:
 
                         fig.update_layout(
                             margin=dict(t=20, l=20, r=20, b=20),
-                            title_text=title,
+                            title_text=f"SECTOR {sector}",
                             title_x=0.4,
                             template="plotly_white",
                             hoverlabel=dict(font_size=16, font_family="Vodafone"),
@@ -976,7 +1098,6 @@ class ChartGenerator:
                 ):
                     container = st.container()
                     with container:
-                        title = self.get_headers(sector_data[cell_name].unique())
 
                         fig = px.area(
                             sector_data,
@@ -1011,8 +1132,10 @@ class ChartGenerator:
 
                         fig.update_layout(
                             margin=dict(t=20, l=20, r=20, b=20),
-                            title_text=title,
+                            title_text=f"SECTOR {sector}",
                             title_x=0.4,
+                            xaxis_title=None,
+                            yaxis_title=None,
                             template="plotly_white",
                             hoverlabel=dict(font_size=16, font_family="Vodafone"),
                             hovermode="x unified",
@@ -1076,15 +1199,13 @@ class ChartGenerator:
                 hover_data={neid: True, y_param: True},
             )
 
-            fig.update_traces(
-                hovertemplate=f"<b>{neid}:</b> %{{customdata[0]}}<br><b>{y_param}:</b> %{{y}}<extra></extra>"
-            )
+            fig.update_traces(hovertemplate=f"<b>{neid}:</b>%{{y}}<extra></extra>")
 
             fig.update_layout(
                 xaxis_title=None,
                 yaxis_title=None,
                 margin=dict(t=20, l=20, r=20, b=20),
-                template="plotly_white",
+                # template="plotly_white",
                 hoverlabel=dict(font_size=16, font_family="Vodafone"),
                 hovermode="x unified",
                 legend=dict(
@@ -1197,7 +1318,8 @@ class ChartGenerator:
                             legendgroup=cell,
                             hovertemplate=(
                                 f"<b>{cell}</b><br>"
-                                f"<b>{y_param}:</b> %{{y}}<br>"
+                                f"<b>%{{x}}</b><br>"
+                                f"<b>PRB:</b> %{{y}}<br>"
                                 "<extra></extra>"
                             ),
                         ),
@@ -1217,7 +1339,8 @@ class ChartGenerator:
                             showlegend=False,
                             hovertemplate=(
                                 f"<b>{cell}</b><br>"
-                                f"<b>{y_param2}:</b> %{{y}}<br>"
+                                f"<b>%{{x}}</b><br>"
+                                f"<b>PRB:</b> %{{y}}<br>"
                                 "<extra></extra>"
                             ),
                         ),
@@ -1227,9 +1350,9 @@ class ChartGenerator:
 
             fig.update_layout(
                 showlegend=True,
-                height=700,
+                height=600,
                 template="plotly_white",
-                hovermode="x unified",
+                # hovermode="x unified",
                 margin=dict(l=20, r=20, t=20, b=5),
                 hoverlabel=dict(font_size=16, font_family="Vodafone"),
                 legend=dict(
@@ -1303,7 +1426,16 @@ class App:
             "L23_F1_S2": ["ME2", "ME02"],
             "L23_F2_S2": ["MF2", "MF02"],
             "L23_F1_S3": ["ME3", "ME03"],
-            "L23_F2_S3": ["MF1", "MF03"],
+            "L23_F2_S3": ["MF3", "MF03"],
+            "L23_F1_S4": ["ME4", "ME04"],
+            "L23_F2_S4": ["MF4", "MF04"],
+            "L23_F1_S5": ["ME5", "ME05"],
+            "L23_F2_S5": ["MF5", "MF05"],
+            "L23_F1_S6": ["ME6", "ME06"],
+            "L23_F2_S6": ["MF6", "MF06"],
+            "L23_F3_S1": ["MI1", "MI01"],
+            "L23_F3_S2": ["MI2", "MI02"],
+            "L23_F3_S3": ["MI3", "MI03"],
             "L23_MIMO_50_F3_S1": ["MV01"],
             "L23_MIMO_50_F3_S2": ["MV02"],
             "L23_MIMO_50_F3_S3": ["MV03"],
@@ -1312,7 +1444,10 @@ class App:
             "L23_MIMO_F1_S3": ["VE03"],
             "L23_MIMO_F2_S1": ["VF01"],
             "L23_MIMO_F2_S2": ["VF02"],
-            "L23_MIMO_F3_S3": ["VF03"],
+            "L23_MIMO_F2_S3": ["VF03"],
+            "L23_MIMO_F3_S1": ["VV01"],
+            "L23_MIMO_F3_S2": ["VV02"],
+            "L23_MIMO_F3_S3": ["VV03"],
             "L9_S1": ["MT1", "MT01"],
             "L9_S2": ["MT2", "MT02"],
             "L9_S3": ["MT3", "MT03"],
@@ -1355,39 +1490,39 @@ class App:
                     if cell.endswith(("MT04", "MT4")) and any(
                         c.endswith(("MT01", "MT1")) for c in cells_upper
                     ):
-                        return "MULSEC LTE 900 SEC 1", ("MT01", "MT1")
+                        return "MULSEC SEC 1", ("MT01", "MT1")
                     elif cell.endswith(("MT05", "MT5")) and any(
                         c.endswith(("MT02", "MT2")) for c in cells_upper
                     ):
-                        return "MULSEC LTE 900 SEC 2", ("MT02", "MT2")
+                        return "MULSEC SEC 2", ("MT02", "MT2")
                     elif cell.endswith(("MT06", "MT6")) and any(
                         c.endswith(("MT03", "MT3")) for c in cells_upper
                     ):
-                        return "MULSEC LTE 900 SEC 3", ("MT03", "MT3")
+                        return "MULSEC SEC 3", ("MT03", "MT3")
                     elif cell.endswith(("ML04", "ML4")) and any(
                         c.endswith(("ML01", "ML1")) for c in cells_upper
                     ):
-                        return "MULSEC LTE 1800 SEC 1", ("ML01", "ML1")
+                        return "MULSEC SEC 1", ("ML01", "ML1")
                     elif cell.endswith(("ML05", "ML5")) and any(
                         c.endswith(("ML02", "ML2")) for c in cells_upper
                     ):
-                        return "MULSEC LTE 1800 SEC 2", ("ML02", "ML2")
+                        return "MULSEC SEC 2", ("ML02", "ML2")
                     elif cell.endswith(("ML06", "ML6")) and any(
                         c.endswith(("ML03", "ML3")) for c in cells_upper
                     ):
-                        return "MULSEC LTE 1800 SEC 3", ("ML03", "ML3")
+                        return "MULSEC SEC 3", ("ML03", "ML3")
                     elif cell.endswith(("MR04", "MR4")) and any(
                         c.endswith(("MR01", "MR1")) for c in cells_upper
                     ):
-                        return "MULSEC LTE 2100 SEC 1", ("MR01", "MR1")
+                        return "MULSEC SEC 1", ("MR01", "MR1")
                     elif cell.endswith(("MR05", "MR5")) and any(
                         c.endswith(("MR02", "MR2")) for c in cells_upper
                     ):
-                        return "MULSEC LTE 2100 SEC 2", ("MR02", "MR2")
+                        return "MULSEC SEC 2", ("MR02", "MR2")
                     elif cell.endswith(("MR06", "MR6")) and any(
                         c.endswith(("MR03", "MR3")) for c in cells_upper
                     ):
-                        return "MULSEC LTE 2100 SEC 3", ("MR03", "MR3")
+                        return "MULSEC SEC 3", ("MR03", "MR3")
                     else:
                         return None, None
                 except Exception as e:
@@ -1975,7 +2110,7 @@ class App:
                     selected_sites, start_date, end_date
                 )
                 self.dataframe_manager.add_dataframe("payload_data", payload_data)
-                st.write(payload_data)
+                # st.write(payload_data)
 
                 ltehourly_data = self.query_manager.get_ltehourly_data(
                     selected_sites, end_date
@@ -1998,9 +2133,11 @@ class App:
 
                 self.dataframe_manager.add_dataframe("ltehourly_data", ltehourly_data)
                 ltehourly_data_mulsec = add_mulsec_category(ltehourly_data)
+                # st.write(ltehourly_data_mulsec)
                 ltehourly_data_final = split_sector(
                     ltehourly_data_mulsec, "EUtranCellFDD"
                 )
+                # st.write(ltehourly_data_final)
                 # st.write(ltehourly_data_final)
                 vswr_data = self.query_manager.get_vswr_data(selected_sites, end_date)
                 self.dataframe_manager.add_dataframe("vswr_data", vswr_data)
@@ -2274,45 +2411,71 @@ class App:
                         else:
                             st.error(f"Path does not exist: {folder}")
                 # MARK: - GeoApp MDT Data
-                mcom_data1 = self.query_manager.get_mcom_data(siteid)
-                st.session_state.mcom_data1 = mcom_data1
-                st.session_state.combined_target_data = combined_target_data
-                required_columns = [
-                    "Site_ID",
-                    "NODE_ID",
-                    "NE_ID",
-                    "Cell_Name",
-                    "Longitude",
-                    "Latitude",
-                    "Dir",
-                    "Ant_BW",
-                    "Ant_Size",
-                    "cellId",
-                    "eNBId",
-                    "KABUPATEN",
-                    "LTE",
-                ]
-                if not all(column in mcom_data.columns for column in required_columns):
-                    raise ValueError(
-                        "The dataframe does not contain all required columns"
-                    )
+                try:
+                    mcom_data1 = self.query_manager.get_mcom_data(siteid)
+                    st.session_state.mcom_data1 = mcom_data1
+                    mcom_data = self.query_manager.get_mcom_data(siteid)
+                    st.session_state.mcom_data = mcom_data
+                    st.session_state.combined_target_data = combined_target_data
 
-                self.dataframe_manager.add_dataframe(f"mcom_data_{siteid}", mcom_data)
-                # st.write(mcom_data)
+                    required_columns = [
+                        "Site_ID",
+                        "NODE_ID",
+                        "NE_ID",
+                        "Cell_Name",
+                        "Longitude",
+                        "Latitude",
+                        "Dir",
+                        "Ant_BW",
+                        "Ant_Size",
+                        "cellId",
+                        "eNBId",
+                        "KABUPATEN",
+                        "LTE",
+                    ]
 
-                if isinstance(selected_neids, list):
-                    selected_neids = selected_neids[0]
+                    try:
+                        if not all(
+                            column in mcom_data.columns for column in required_columns
+                        ):
+                            raise ValueError(
+                                "The dataframe does not contain all required columns"
+                            )
 
-                if isinstance(selected_neids, str):
-                    ltemcomdata = mcom_data[mcom_data["NE_ID"] == selected_neids]
-                else:
-                    raise ValueError(
-                        "selected_neid should be a string or a list containing a string"
+                        self.dataframe_manager.add_dataframe(
+                            f"mcom_data_{siteid}", mcom_data
+                        )
+
+                        if isinstance(selected_neids, list):
+                            selected_neids = selected_neids[0]
+
+                        if isinstance(selected_neids, str):
+                            ltemcomdata = mcom_data[
+                                mcom_data["NE_ID"] == selected_neids
+                            ]
+                        else:
+                            raise ValueError(
+                                "selected_neid should be a string or a list containing a string"
+                            )
+
+                    except ValueError as ve:
+                        st.error(f"An error occurred: {ve!s}")
+                    except KeyError as ke:
+                        st.error(f"A column is missing in the dataframe: {ke!s}")
+                    except Exception as e:
+                        st.error(
+                            "An unexpected error occurred while processing the data."
+                        )
+
+                except Exception as e:
+                    st.error(
+                        "An error occurred while fetching data. Please try again later."
                     )
 
                 # MARK: - GeoApp MDT Data
                 ltemdtdata = self.query_manager.get_ltemdt_data(selected_sites)
                 self.dataframe_manager.add_dataframe("ltemdtdata", ltemdtdata)
+
                 ltemcomdata["eNBId"] = ltemcomdata["eNBId"].astype(float)
                 ltemcomdata["cellId"] = ltemcomdata["cellId"].astype(float)
                 ltemdtdata["enodebid"] = ltemdtdata["enodebid"].astype(float)
@@ -2320,12 +2483,13 @@ class App:
 
                 filter_set = set(zip(ltemcomdata["eNBId"], ltemcomdata["cellId"]))
 
-                ltemdtdata_final = ltemdtdata[
+                ltemdtdata_final = ltemdtdata.loc[
                     ltemdtdata[["enodebid", "ci"]].apply(tuple, axis=1).isin(filter_set)
                 ]
 
                 ltetastate_data = self.query_manager.get_ltetastate_data(selected_sites)
                 self.dataframe_manager.add_dataframe("ltetastate_data", ltetastate_data)
+
                 mcom_data["cellId"] = mcom_data["cellId"].astype(float)
                 mcom_data["eNBId"] = mcom_data["eNBId"].astype(float)
                 ltetastate_data["ci"] = ltetastate_data["ci"].astype(float)
@@ -2343,9 +2507,11 @@ class App:
                     on=["ci", "enodebid"],
                     how="inner",
                 )
-
+                # tastate_final = split_sector(tastate_data, "Cell_Name")
                 # MARK: use this to calculate RF Propagation
                 self.dataframe_manager.add_dataframe("tastate_data", tastate_data)
+                ta_state = split_sector(tastate_data, "Cell_Name")
+                # st.write(ta_state)
                 col1, col2 = st.columns([3, 2])
                 con1 = col1.container()
                 con2 = col2.container()
@@ -2370,16 +2536,10 @@ class App:
                     )
                     self.geodata = GeoApp(mcom_data, ltemdtdata)
                     self.geodata.run_geo_app()
+
                 with con2:
-                    st.markdown(
-                        *styling(
-                            f"📶 TA State for Site {siteid}",
-                            font_size=24,
-                            text_align="left",
-                            tag="h4",
-                        )
-                    )
-                    self.chart_generator.create_charts_tastate(tastate_data)
+
+                    # self.chart_generator.create_charts_tastate(ta_state)
                     st.markdown(
                         *styling(
                             f"📶 TA Remark for Site {siteid}",
@@ -2390,6 +2550,21 @@ class App:
                     )
                     tafinal = calculate_rf(isd_data, tastate_data)
                     st.table(tafinal)
+
+                col1 = st.columns(1)[0]
+                con1 = col1.container()
+                with col1:
+                    st.markdown(
+                        *styling(
+                            f"📶 TA State for Site {siteid}",
+                            font_size=24,
+                            text_align="left",
+                            tag="h4",
+                        )
+                    )
+                    self.chart_generator.create_charts_tastate(
+                        ta_state, "eutrancell_new"
+                    )
 
                 with col1:
                     st.markdown(
@@ -2548,7 +2723,7 @@ class App:
                         )
                     )
 
-                col1, col2, col3 = st.columns([1, 1, 1])
+                col1, col2, col3 = st.columns([1, 1, 1], gap="small")
                 con1 = col1.container(border=True)
                 con2 = col2.container(border=True)
                 con3 = col3.container(border=True)
