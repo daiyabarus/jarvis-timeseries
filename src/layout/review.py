@@ -1011,7 +1011,6 @@ class ChartGenerator:
                                 line_color="#F70000",
                                 line_width=2,
                             )
-                            # Adjust y_max if yline_value is greater
                             if yline_value > y_max:
                                 y_max = yline_value
 
