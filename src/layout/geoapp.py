@@ -224,6 +224,7 @@ class GeoApp:
 
     def add_legend(self):
         # Combined Legend
+        se
         combined_legend_template = """
         {% macro html(this, kwargs) %}
         <div id='maplegend' class='maplegend'

@@ -827,7 +827,9 @@ class ChartGenerator:
             y_max = (
                 100
                 if 95 < y_max_value <= 100
-                else y_max_value if y_max_value > 100 else y_max_value
+                else y_max_value
+                if y_max_value > 100
+                else y_max_value
             )
 
             with columns[idx % cols]:
@@ -1011,6 +1013,7 @@ class ChartGenerator:
                                 line_color="#F70000",
                                 line_width=2,
                             )
+                            # Adjust y_max if yline_value is greater
                             if yline_value > y_max:
                                 y_max = yline_value
 
@@ -1097,7 +1100,6 @@ class ChartGenerator:
                 ):
                     container = st.container()
                     with container:
-
                         fig = px.area(
                             sector_data,
                             x=x_param,
@@ -2537,7 +2539,6 @@ class App:
                     self.geodata.run_geo_app()
 
                 with con2:
-
                     # self.chart_generator.create_charts_tastate(ta_state)
                     st.markdown(
                         *styling(
